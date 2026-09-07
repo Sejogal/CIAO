@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
 
+from uuid import UUID
+
+
 if TYPE_CHECKING:
     from app.modules.identity.credential_model import Credential
+    from app.modules.identity.role_model import Role
+    from app.modules.projects.model import Project
 
 
 class User(BaseEntity):
@@ -57,5 +62,23 @@ class User(BaseEntity):
 
     credentials: Mapped[list["Credential"]] = relationship(
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    role_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("roles.id"),
+        nullable=True,
+        index=True,
+    )
+
+    role: Mapped["Role | None"] = relationship(
+        "Role",
+        back_populates="users",
+        lazy="selectin",
+
+    )
+
+    projects: Mapped[list["Project"]] = relationship(
+        "Project",
+        back_populates="owner",
         cascade="all, delete-orphan",
     )

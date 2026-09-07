@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
 
@@ -38,3 +38,5 @@ class RefreshToken(BaseEntity):
         default=False,
         nullable=False,
     )
+
+    user = relationship("User")

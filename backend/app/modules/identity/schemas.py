@@ -38,3 +38,26 @@ class RefreshTokenRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class RoleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    description: str | None
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    email: EmailStr
+    avatar: str | None
+    language: str
+    timezone: str
+    is_active: bool
+    is_verified: bool
+    role: RoleResponse | None = None
+    permissions: list[str] = []

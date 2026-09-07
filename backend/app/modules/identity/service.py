@@ -4,21 +4,26 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_refresh_token,
-    decode_refresh_token,
+    decode_token,
     hash_password,
     verify_password,
 )
-from app.core.config import settings
 from app.modules.identity.credential_model import Credential
 from app.modules.identity.model import User
 from app.modules.identity.refresh_token_model import RefreshToken
 from app.modules.identity.schemas import RegisterRequest
+from app.core.security import decode_refresh_token
+from app.core.config import settings
 
 
 class IdentityService:
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
 
     @staticmethod
     async def register(
@@ -89,17 +94,20 @@ class IdentityService:
 
         return result.scalar_one_or_none()
 
-    @staticmethod
+
+    #LOGIN
     async def login(
-        db: AsyncSession,
+        self,
         email: str,
         password: str,
     ):
-
-        user = await IdentityService.get_user_by_email(
-            db,
-            email,
+        stmt = select(User).where(
+            User.email == email
         )
+
+        result = await self.db.execute(stmt)
+
+        user = result.scalar_one_or_none()
 
         if not user:
             raise HTTPException(
@@ -113,10 +121,14 @@ class IdentityService:
                 detail="User account is inactive",
             )
 
-        credential = await IdentityService.get_credential_for_user(
-            db,
-            user.id,
+        stmt = select(Credential).where(
+            Credential.user_id == user.id,
+            Credential.provider == "password",
         )
+
+        result = await self.db.execute(stmt)
+
+        credential = result.scalar_one_or_none()
 
         if not credential:
             raise HTTPException(
@@ -152,9 +164,63 @@ class IdentityService:
             ),
         )
 
-        db.add(stored_refresh_token)
+        self.db.add(stored_refresh_token)
 
-        await db.commit()
+        await self.db.commit()
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+        }
+    
+
+    #Refresh-acess-token
+    async def refresh_access_token(
+        self,
+        refresh_token: str,
+    ):
+        try:
+            payload = decode_token(refresh_token)
+        except Exception:
+            raise ValueError(
+                "Invalid or expired refresh token"
+            )
+
+        if payload.get("type") != "refresh":
+            raise ValueError(
+                "Invalid token type"
+            )
+
+        user_id = payload.get("sub")
+
+        if not user_id:
+            raise ValueError(
+                "Invalid refresh token"
+            )
+
+        result = await self.db.execute(
+            select(RefreshToken).where(
+                RefreshToken.token == refresh_token,
+                RefreshToken.revoked == False,
+            )
+        )
+
+        stored_token = result.scalar_one_or_none()
+
+        if not stored_token:
+            raise ValueError(
+                "Refresh token revoked or not found"
+            )
+
+        if stored_token.expires_at <= datetime.now(timezone.utc):
+            raise ValueError(
+                "Refresh token expired"
+            )
+
+        access_token = create_access_token(
+            user_id
+        )
 
         return {
             "access_token": access_token,
@@ -162,87 +228,7 @@ class IdentityService:
             "token_type": "bearer",
         }
 
-    @staticmethod
-    async def refresh_access_token(
-        db: AsyncSession,
-        refresh_token: str,
-    ):
 
-        try:
-            payload = decode_refresh_token(
-                refresh_token
-            )
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired refresh token",
-            )
-
-        user_id = payload.get("sub")
-
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token",
-            )
-
-        stmt = select(RefreshToken).where(
-            RefreshToken.token == refresh_token,
-            RefreshToken.revoked == False,
-        )
-
-        result = await db.execute(stmt)
-
-        stored_token = result.scalar_one_or_none()
-
-        if not stored_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Refresh token revoked or not found",
-            )
-
-        if stored_token.expires_at <= datetime.now(timezone.utc):
-
-            stored_token.revoked = True
-
-            await db.commit()
-
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Refresh token expired",
-            )
-
-        # Rotação do refresh token
-        stored_token.revoked = True
-
-        new_access_token = create_access_token(
-            user_id
-        )
-
-        new_refresh_token = create_refresh_token(
-            user_id
-        )
-
-        new_stored_refresh_token = RefreshToken(
-            user_id=stored_token.user_id,
-            token=new_refresh_token,
-            expires_at=(
-                datetime.now(timezone.utc)
-                + timedelta(
-                    days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-                )
-            ),
-        )
-
-        db.add(new_stored_refresh_token)
-
-        await db.commit()
-
-        return {
-            "access_token": new_access_token,
-            "refresh_token": new_refresh_token,
-            "token_type": "bearer",
-        }
 
     @staticmethod
     async def logout(
@@ -263,6 +249,5 @@ class IdentityService:
 
             await db.commit()
 
-        return {
-            "message": "Até breve!"
-        }
+    def __init__(self, db: AsyncSession):
+        self.db = db
