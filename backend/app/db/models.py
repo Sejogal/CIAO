@@ -6,6 +6,8 @@ from app.modules.identity.permission_model import Permission
 from app.modules.identity.role_permission_model import RolePermission
 from app.modules.projects.model import Project
 from app.modules.companies.model import Company, CompanyMember
+from app.modules.devices.model import Device
+from app.modules.datastreams.model import Datastream
 __all__ = [
     "User",
     "Credential",

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.companies.model import Company, CompanyMember
@@ -92,3 +93,101 @@ class CompanyRepository:
         result = await db.execute(stmt)
 
         return result.scalar_one_or_none()
+
+    
+    @staticmethod
+    async def get_members(
+        db: AsyncSession,
+        company_id: UUID,
+    ) -> list[CompanyMember]:
+
+        stmt = (
+            select(CompanyMember)
+            .where(
+                CompanyMember.company_id == company_id
+            )
+            .options(
+                selectinload(CompanyMember.user)
+            )
+            .order_by(CompanyMember.created_at.asc())
+        )
+
+        result = await db.execute(stmt)
+
+        return list(
+            result.scalars().all()
+        )
+
+    @staticmethod
+    async def update_member_role(
+        db: AsyncSession,
+        member: CompanyMember,
+        role: str,
+    ) -> CompanyMember:
+
+        member.role = role
+
+        await db.commit()
+        await db.refresh(member)
+
+        return member
+
+    @staticmethod
+    async def remove_member(
+        db: AsyncSession,
+        member: CompanyMember,
+    ) -> None:
+
+        await db.delete(member)
+
+        await db.commit()
+
+
+    @staticmethod
+    async def get_for_user(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> list[Company]:
+
+        stmt = (
+            select(Company)
+            .outerjoin(
+                CompanyMember,
+                CompanyMember.company_id == Company.id,
+            )
+            .where(
+                (Company.owner_id == user_id)
+                | (CompanyMember.user_id == user_id)
+            )
+            .distinct()
+            .order_by(Company.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+
+        return list(result.scalars().all())
+    
+
+    @staticmethod
+    async def get_for_user(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> list[Company]:
+
+        stmt = (
+            select(Company)
+            .outerjoin(
+                CompanyMember,
+                CompanyMember.company_id == Company.id,
+            )
+            .where(
+                (Company.owner_id == user_id)
+                | (CompanyMember.user_id == user_id)
+            )
+            .distinct()
+            .order_by(Company.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+
+        return list(result.scalars().all())

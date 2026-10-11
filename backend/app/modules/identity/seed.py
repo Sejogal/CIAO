@@ -21,53 +21,84 @@ DEFAULT_PERMISSIONS = [
     ("devices:create", "Criar dispositivos"),
     ("devices:update", "Atualizar dispositivos"),
     ("devices:delete", "Eliminar dispositivos"),
+
+    
+    ("companies:create", "Criar empresas"),
+    ("companies:read", "Visualizar empresas"),
+    ("companies:update", "Atualizar empresas"),
+    ("companies:manage_members", "Gerir membros da empresa"),
+    ("companies:delete", "Eliminar empresas")
 ]
 
 
 DEFAULT_ROLES = {
-    "admin": [
-        "users:read",
-        "users:create",
-        "users:update",
-        "users:delete",
-        "projects:read",
-        "projects:create",
-        "projects:update",
-        "projects:delete",
-        "devices:read",
-        "devices:create",
-        "devices:update",
-        "devices:delete",
-        "companies:create",
-        "companies:read",
-        "companies:update",
-        "companies:manage_members"
-    ],
-    "user": [
-        "projects:read",
-        "projects:create",
-        "projects:update",
-        "devices:read",
-        "devices:create",
-        "devices:update",
-    ],
-    "student": [
-        "projects:read",
-        "projects:create",
-        "devices:read",
-        "companies:create",
-        "companies:read"
-    ],
-    "teacher": [
-        "projects:read",
-        "projects:create",
-        "projects:update",
-        "devices:read",
-        "devices:create",
-        "devices:update",
-    ],
-}
+    "admin": {
+        "description": "Administrador da plataforma",
+        "permissions": [
+            "projects:read",
+            "projects:create",
+            "projects:update",
+            "projects:delete",
 
+            "devices:read",
+            "devices:create",
+            "devices:update",
+            "devices:delete",
+
+            "users:read",
+            "users:create",
+            "users:update",
+            "users:delete",
+
+            "companies:read",
+            "companies:create",
+            "companies:update",
+            "companies:delete",
+            "companies:manage_members",
+        ],
+    },
+
+    "student": {
+        "description": "Role padrão: student",
+        "permissions": [
+            "projects:read",
+            "projects:create",
+            "devices:read",
+
+            "companies:read",
+            "companies:create",
+        ],
+    },
+
+    "teacher": {
+        "description": "Role padrão: teacher",
+        "permissions": [
+            "projects:read",
+            "projects:create",
+            "projects:update",
+
+            "devices:read",
+            "devices:create",
+            "devices:update",
+
+            "companies:read",
+            "companies:create",
+            "companies:update",
+            "companies:manage_members",
+        ],
+    },
+
+    "user": {
+        "description": "Role padrão: user",
+        "permissions": [
+            "devices:read",
+            "devices:create",
+            "devices:update",
+
+            "companies:read",
+        ],
+    },
+}
 
 async def seed_rbac(db: AsyncSession):
     permissions = {}

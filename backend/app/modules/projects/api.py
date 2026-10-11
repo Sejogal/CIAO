@@ -32,6 +32,7 @@ router = APIRouter(
         Depends(require_permission("projects:create"))
     ],
 )
+
 async def create_project(
     data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
@@ -39,27 +40,22 @@ async def create_project(
 ):
     return await ProjectService.create(
         db=db,
-        owner_id=current_user.id,
+        user_id=current_user.id,
         data=data,
     )
 
 #LISTAR TODOS PROJETOS DO USUÁRIO LOGADO
-@router.get(
-    "",
-    response_model=list[ProjectResponse],
-    dependencies=[
-        Depends(require_permission("projects:read"))
-    ],
-)
+@router.get("", response_model=list[ProjectResponse])
 async def list_projects(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        require_permission("projects:read")
+    ),
 ):
-    return await ProjectService.list(
+    return await ProjectService.list_for_user(
         db=db,
-        owner_id=current_user.id,
+        user_id=current_user.id,
     )
-
 
 #OBTER PROJETO POR ID
 @router.get(
@@ -84,9 +80,6 @@ async def get_project(
 @router.patch(
     "/{project_id}",
     response_model=ProjectResponse,
-    dependencies=[
-        Depends(require_permission("projects:update"))
-    ],
 )
 async def update_project(
     project_id: UUID,
@@ -97,7 +90,7 @@ async def update_project(
     return await ProjectService.update(
         db=db,
         project_id=project_id,
-        owner_id=current_user.id,
+        user_id=current_user.id,
         data=data,
     )
 
@@ -106,9 +99,6 @@ async def update_project(
 @router.delete(
     "/{project_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(require_permission("projects:delete"))
-    ],
 )
 async def delete_project(
     project_id: UUID,
@@ -118,7 +108,7 @@ async def delete_project(
     await ProjectService.delete(
         db=db,
         project_id=project_id,
-        owner_id=current_user.id,
+        user_id=current_user.id,
     )
 
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return None

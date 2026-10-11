@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, Text
@@ -22,12 +20,28 @@ class Project(BaseEntity):
     )
 
     owner_id: Mapped[UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    company_id: Mapped[UUID] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     owner = relationship(
         "User",
-        back_populates="projects",
+        foreign_keys=[owner_id],
+    )
+
+    company = relationship(
+        "Company",
+        foreign_keys=[company_id],
+    )
+    devices = relationship(
+        "Device",
+        back_populates="project",
+        cascade="all, delete-orphan",
     )
