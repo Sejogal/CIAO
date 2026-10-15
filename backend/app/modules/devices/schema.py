@@ -61,3 +61,16 @@ class DeviceResponse(BaseModel):
     status: str
     last_seen: datetime | None
     is_active: bool
+
+
+class DeviceCreateResponse(DeviceResponse):
+    """
+    Only ever returned from the create endpoint. `token` and
+    `mqtt_password` are shown here once, in plaintext, and never again -
+    the DB only keeps `mqtt_password`'s hash. Lose them and the device
+    must be re-provisioned (new credentials, same device row).
+    """
+
+    token: str
+    mqtt_username: str
+    mqtt_password: str

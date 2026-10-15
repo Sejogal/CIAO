@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import decode_token
-from app.db.dependencies import get_db
+from app.db.session import get_db
 from app.modules.identity.model import User
 from app.modules.identity.role_model import Role
 from app.modules.identity.service import IdentityService

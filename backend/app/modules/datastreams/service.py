@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.datastreams.model import Datastream
@@ -67,10 +68,17 @@ class DatastreamService:
             is_active=True,
         )
 
-        return await DatastreamRepository.create(
-            db=db,
-            datastream=datastream,
-        )
+        try:
+            return await DatastreamRepository.create(
+                db=db,
+                datastream=datastream,
+            )
+        except IntegrityError:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Datastream key already exists for this device",
+            )
 
     @staticmethod
     async def list_by_device(
@@ -166,11 +174,18 @@ class DatastreamService:
             )
 
         if update_data:
-            datastream = await DatastreamRepository.update(
-                db=db,
-                datastream=datastream,
-                data=update_data,
-            )
+            try:
+                datastream = await DatastreamRepository.update(
+                    db=db,
+                    datastream=datastream,
+                    data=update_data,
+                )
+            except IntegrityError:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Datastream key already exists for this device",
+                )
 
         return datastream
 

@@ -23,6 +23,7 @@ dependencies = [
     "psycopg[binary]>=3.3.4",
     "pyjwt>=2.13.0",
     "python-multipart>=0.0.32",
+    "aiomqtt>=2.5",
 ]
 
 [dependency-groups]
@@ -32,4 +33,11 @@ dev = [
     "ruff",
     "mypy",
     "pre-commit",
+    # Pure-Python MQTT broker used only to run a local broker in tests/dev -
+    # production connects to a real broker (EMQX), per README_CIAO.md.
+    "amqtt>=0.12",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import hash_password
 from app.modules.devices.model import Device
 from app.modules.devices.repository import DeviceRepository
 from app.modules.devices.schema import DeviceCreate, DeviceUpdate
@@ -18,7 +19,13 @@ class DeviceService:
         user_id: UUID,
         project_id: UUID,
         data: DeviceCreate,
-    ) -> Device:
+    ) -> tuple[Device, str, str]:
+        """
+        Returns (device, token, mqtt_password) - the two secrets in
+        plaintext, for the caller to show exactly once. Only their hash
+        (mqtt_password) or themselves at rest (token - see Device model)
+        survive past this call; there is no way to recover them later.
+        """
 
         # Verifica se o utilizador tem acesso ao projeto
         project = await ProjectService.get_for_user(
@@ -33,10 +40,16 @@ class DeviceService:
                 detail="Project not found",
             )
 
+        device_uuid = str(uuid4())
+        token = token_urlsafe(32)
+        mqtt_password = token_urlsafe(24)
+
         device = Device(
             project_id=project_id,
-            uuid=str(uuid4()),
-            token=token_urlsafe(32),
+            uuid=device_uuid,
+            token=token,
+            mqtt_username=device_uuid,
+            mqtt_password=hash_password(mqtt_password),
             name=data.name,
             serial=data.serial,
             model=data.model,
@@ -45,10 +58,12 @@ class DeviceService:
             is_active=True,
         )
 
-        return await DeviceRepository.create(
+        device = await DeviceRepository.create(
             db=db,
             device=device,
         )
+
+        return device, token, mqtt_password
 
     @staticmethod
     async def list_by_project(

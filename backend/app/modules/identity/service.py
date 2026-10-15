@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.security import (
@@ -15,9 +17,12 @@ from app.core.security import (
 from app.modules.identity.credential_model import Credential
 from app.modules.identity.model import User
 from app.modules.identity.refresh_token_model import RefreshToken
+from app.modules.identity.role_model import Role
 from app.modules.identity.schemas import RegisterRequest
 from app.core.security import decode_refresh_token
 from app.core.config import settings
+
+DEFAULT_SELF_SIGNUP_ROLE = "user"
 
 
 class IdentityService:
@@ -42,9 +47,15 @@ class IdentityService:
                 "Já existe um utilizador com este e-mail."
             )
 
+        default_role_result = await db.execute(
+            select(Role).where(Role.name == DEFAULT_SELF_SIGNUP_ROLE)
+        )
+        default_role = default_role_result.scalar_one_or_none()
+
         user = User(
             full_name=data.full_name,
             email=data.email,
+            role_id=default_role.id if default_role else None,
         )
 
         db.add(user)
@@ -64,6 +75,50 @@ class IdentityService:
         await db.refresh(user)
 
         return user
+
+    @staticmethod
+    async def update_user_role(
+        db: AsyncSession,
+        user_id: UUID,
+        role_name: str,
+    ) -> User:
+
+        user_result = await db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        role_result = await db.execute(
+            select(Role).where(Role.name == role_name)
+        )
+        role = role_result.scalar_one_or_none()
+
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Role '{role_name}' does not exist",
+            )
+
+        user.role_id = role.id
+
+        await db.commit()
+
+        refreshed_result = await db.execute(
+            select(User)
+            .options(
+                selectinload(User.role).selectinload(Role.permissions)
+            )
+            .where(User.id == user_id)
+            .execution_options(populate_existing=True)
+        )
+
+        return refreshed_result.scalar_one()
 
     @staticmethod
     async def get_user_by_email(

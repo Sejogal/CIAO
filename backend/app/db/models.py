@@ -8,6 +8,7 @@ from app.modules.projects.model import Project
 from app.modules.companies.model import Company, CompanyMember
 from app.modules.devices.model import Device
 from app.modules.datastreams.model import Datastream
+from app.modules.datastream_values.model import DatastreamValue
 __all__ = [
     "User",
     "Credential",

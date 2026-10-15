@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.modules.devices.schema import (
     DeviceCreate,
+    DeviceCreateResponse,
     DeviceResponse,
     DeviceUpdate,
 )
@@ -21,7 +22,7 @@ router = APIRouter(
 
 @router.post(
     "/projects/{project_id}",
-    response_model=DeviceResponse,
+    response_model=DeviceCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_device(
@@ -30,11 +31,18 @@ async def create_device(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await DeviceService.create(
+    device, token, mqtt_password = await DeviceService.create(
         db=db,
         user_id=current_user.id,
         project_id=project_id,
         data=data,
+    )
+
+    return DeviceCreateResponse(
+        **DeviceResponse.model_validate(device).model_dump(),
+        token=token,
+        mqtt_username=device.mqtt_username,
+        mqtt_password=mqtt_password,
     )
 
 

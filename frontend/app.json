@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "CIAO — Conecta IoT Angola",
+    "slug": "ciao-iot-angola",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "ciao",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "ao.ciao.iot"
+    },
+    "ios": {
+      "bundleIdentifier": "ao.ciao.iot"
+    }
+  }
+}

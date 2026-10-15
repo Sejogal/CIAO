@@ -3,13 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.db.dependencies import get_db
+from app.db.session import get_db
 
 from app.modules.identity.dependencies import (
     get_current_user,
     get_identity_service,
 )
 from app.modules.identity.model import User
+
+from uuid import UUID
 
 from app.modules.identity.schemas import (
     LoginRequest,
@@ -18,6 +20,7 @@ from app.modules.identity.schemas import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UserRoleUpdate,
 )
 
 from app.modules.identity.service import IdentityService
@@ -145,6 +148,41 @@ async def logout(
     return {
         "message": "Logout realizado com sucesso"
     }
+
+@router.patch(
+    "/users/{user_id}/role",
+    response_model=UserResponse,
+)
+async def update_user_role(
+    user_id: UUID,
+    data: UserRoleUpdate,
+    db: AsyncSession = Depends(get_db),
+    _current_user: User = Depends(
+        require_permission("users:update")
+    ),
+):
+    user = await IdentityService.update_user_role(
+        db,
+        user_id=user_id,
+        role_name=data.role_name,
+    )
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "avatar": user.avatar,
+        "language": user.language,
+        "timezone": user.timezone,
+        "is_active": user.is_active,
+        "is_verified": user.is_verified,
+        "role": user.role,
+        "permissions": [
+            permission.name
+            for permission in user.role.permissions
+        ] if user.role else [],
+    }
+
 
 @router.post("/seed-rbac")
 async def seed_rbac_endpoint(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, Float, ForeignKey, String
+from sqlalchemy import Boolean, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
@@ -10,6 +10,13 @@ from app.db.base import BaseEntity
 
 class Datastream(BaseEntity):
     __tablename__ = "datastreams"
+    __table_args__ = (
+        UniqueConstraint(
+            "device_id",
+            "key",
+            name="uq_datastreams_device_id_key",
+        ),
+    )
 
     device_id: Mapped[UUID] = mapped_column(
         ForeignKey("devices.id", ondelete="CASCADE"),
@@ -57,4 +64,10 @@ class Datastream(BaseEntity):
     device = relationship(
         "Device",
         back_populates="datastreams",
+    )
+
+    values = relationship(
+        "DatastreamValue",
+        back_populates="datastream",
+        cascade="all, delete-orphan",
     )

@@ -121,7 +121,7 @@ async def seed_rbac(db: AsyncSession):
 
         permissions[name] = permission
 
-    for role_name, permission_names in DEFAULT_ROLES.items():
+    for role_name, role_data in DEFAULT_ROLES.items():
         result = await db.execute(
             select(Role).where(Role.name == role_name)
         )
@@ -131,13 +131,13 @@ async def seed_rbac(db: AsyncSession):
         if not role:
             role = Role(
                 name=role_name,
-                description=f"Role padrão: {role_name}",
+                description=role_data["description"],
             )
 
             db.add(role)
             await db.flush()
 
-        for permission_name in permission_names:
+        for permission_name in role_data["permissions"]:
             permission = permissions[permission_name]
 
             result = await db.execute(
