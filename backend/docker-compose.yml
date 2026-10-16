@@ -49,9 +49,15 @@ services:
 
   emqx:
 
-    image: emqx/emqx:5
+    image: emqx/emqx:5.10.5
 
     container_name: conecta-emqx
+
+    environment:
+      EMQX_AUTH_SECRET: ${EMQX_AUTH_SECRET:?Defina EMQX_AUTH_SECRET no arquivo .env}
+
+    volumes:
+      - ./emqx/base.hocon:/opt/emqx/etc/base.hocon:ro
 
     ports:
 

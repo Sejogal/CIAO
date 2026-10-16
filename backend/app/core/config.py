@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     MQTT_PORT: int = 1883
     MQTT_USERNAME: str = "admin"
     MQTT_PASSWORD: str = "public"
+    EMQX_AUTH_SECRET: str = ""
+    MQTT_DEVICE_OFFLINE_AFTER_SECONDS: int = 120
+    MQTT_HEARTBEAT_CHECK_INTERVAL_SECONDS: int = 30
 
     SECRET_KEY: str
 

@@ -8,6 +8,7 @@ from app.modules.datastream_values.model import DatastreamValue
 from app.modules.datastream_values.repository import DatastreamValueRepository
 from app.modules.datastream_values.schema import DatastreamValueCreate
 from app.modules.datastreams.service import DatastreamService
+from app.modules.automation.service import AutomationService
 
 SUPPORTED_DATA_TYPES = {"boolean", "integer", "float", "string", "json"}
 
@@ -67,10 +68,16 @@ class DatastreamValueService:
             recorded_at=data.recorded_at or datetime.now(),
         )
 
-        return await DatastreamValueRepository.create(
+        created = await DatastreamValueRepository.create(
             db=db,
             value=value,
         )
+        await AutomationService.evaluate(
+            db=db,
+            datastream_id=datastream_id,
+            value=data.value,
+        )
+        return created
 
     @staticmethod
     async def get_latest(

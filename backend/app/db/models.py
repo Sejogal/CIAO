@@ -9,6 +9,8 @@ from app.modules.companies.model import Company, CompanyMember
 from app.modules.devices.model import Device
 from app.modules.datastreams.model import Datastream
 from app.modules.datastream_values.model import DatastreamValue
+from app.modules.dashboards.model import Dashboard, Widget
+from app.modules.automation.model import AutomationRule, DeviceCommand, Notification
 __all__ = [
     "User",
     "Credential",
@@ -17,5 +19,10 @@ __all__ = [
     "Permission",
     "RolePermission",
     "Project",
+    "Dashboard",
+    "Widget",
+    "AutomationRule",
+    "DeviceCommand",
+    "Notification",
 ]
 

@@ -1,0 +1,22 @@
+authentication = [
+  {
+    mechanism = password_based
+    backend = http
+    method = post
+    url = "http://api:8000/api/v1/mqtt/emqx/authentication"
+    headers {
+      "Content-Type" = "application/json"
+      "X-CIAO-EMQX-Secret" = "${EMQX_AUTH_SECRET}"
+    }
+    body {
+      username = "${username}"
+      password = "${password}"
+    }
+  }
+]
+
+authorization {
+  no_match = deny
+  deny_action = ignore
+  sources = []
+}

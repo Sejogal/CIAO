@@ -1,1 +1,34 @@
-import {useState} from "react";import {View} from "react-native";import {useRouter} from "expo-router";import {actions,uid} from "@/store";import {s,Header,Card,Field,Button} from "@/ui";export default function NewCompany(){const r=useRouter();const[n,setN]=useState("Nova empresa"),[d,setD]=useState("Descrição");return <View style={s.safe}><View style={s.content}><Header title="Nova empresa"/><Card><Field label="Nome" value={n} onChangeText={setN}/><Field label="Descrição" value={d} onChangeText={setD}/><Button onPress={()=>{actions.saveCompany({id:uid(),name:n,description:d,members:[]});r.back()}}>Criar empresa</Button></Card></View></View>}
+import { useState } from "react";
+import { Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { C, s, Header, Card, Field, Button } from "@/ui";
+import { useCreateCompany } from "@/api/companies";
+import { ApiError } from "@/api/client";
+export default function NewCompany() {
+  const r = useRouter();
+  const [n, setN] = useState("");
+  const [d, setD] = useState("");
+  const [err, setErr] = useState("");
+  const createMutation = useCreateCompany();
+  function submit() {
+    setErr("");
+    if (n.trim().length < 2) return setErr("Indique o nome da empresa.");
+    createMutation.mutate(
+      { name: n, description: d || undefined },
+      { onSuccess: (c) => r.replace(`/empresas/${c.id}`), onError: (e) => setErr(e instanceof ApiError ? e.message : "Não foi possível criar a empresa.") },
+    );
+  }
+  return (
+    <View style={s.safe}>
+      <View style={s.content}>
+        <Header title="Nova empresa" />
+        {err ? <Text style={{ color: C.danger }}>{err}</Text> : null}
+        <Card>
+          <Field label="Nome" value={n} onChangeText={setN} />
+          <Field label="Descrição" value={d} onChangeText={setD} />
+          <Button onPress={submit} disabled={createMutation.isPending}>{createMutation.isPending ? "A criar…" : "Criar empresa"}</Button>
+        </Card>
+      </View>
+    </View>
+  );
+}

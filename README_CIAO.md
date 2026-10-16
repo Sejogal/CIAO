@@ -5,11 +5,18 @@
 > facilitar a criação, gestão e monitorização de projetos IoT, com uma
 > arquitetura modular e preparada para crescer.
 
-**Estado do projeto:** backend em desenvolvimento. Os módulos de
-identidade/RBAC, empresas, projetos e dispositivos já foram
-implementados e testados nos fluxos principais. O módulo Datastreams
-está implementado em código e a migration foi aplicada, mas os testes
-funcionais do CRUD ainda precisam de ser concluídos.
+**Estado do projeto:** backend com os módulos principais implementados e
+testados (identidade/RBAC, empresas, projetos, dispositivos,
+datastreams, histórico de valores e MQTT — ver Prioridades 1-5 na
+secção 11). Dashboards/widgets e regras de automação com notificações
+internas foram implementados no backend e ligados à tela mobile. Comandos
+MQTT para atuadores são publicados por uma fila persistente com tentativas
+de repetição; falta integrar e validar o contrato no firmware. O frontend
+(`frontend/`, Expo/React Native) já liga
+os fluxos principais (login, empresas, projetos, dispositivos,
+datastreams, dashboards/widgets e valores/histórico à API real.
+As notificações são internas à aplicação; envio push/e-mail ainda não
+está implementado — ver secção 7.
 
 ------------------------------------------------------------------------
 
@@ -63,14 +70,27 @@ Tecnologias identificadas no backend atual:
 -   **uv** --- gestão do ambiente Python e execução de comandos.
 -   **Uvicorn** --- servidor ASGI.
 
+Frontend (`frontend/`):
+
+-   **Expo SDK 57 / React Native 0.86 / Expo Router** --- app móvel nativa
+    (não é o React web originalmente previsto; a app foi convertida a
+    partir de um protótipo web anterior — ver `frontend/README.md`).
+-   **@tanstack/react-query** --- camada de fetching/mutations contra a
+    API real.
+-   **expo-secure-store** --- persistência de tokens JWT e do URL do
+    backend configurado.
+-   Cliente HTTP próprio (`frontend/src/api/client.ts`), sem gerador de
+    tipos a partir do OpenAPI — tipos escritos à mão, espelhando os
+    schemas Pydantic do backend.
+
 Tecnologias previstas ou cuja integração completa ainda precisa de ser
 confirmada:
 
--   **MQTT / EMQX** --- comunicação entre dispositivos e plataforma.
--   **Redis** --- cache, filas ou apoio a funcionalidades em tempo real.
--   **React** --- frontend planeado.
--   **Auth0** --- foi considerado no plano de autenticação; o estado de
-    integração deve ser confirmado no código atual.
+-   **Redis** --- configurado em `.env`, mas ainda sem nenhum uso real no
+    código (nem cache, nem filas, nem rate limiting).
+-   **Auth0** --- foi considerado no plano de autenticação; o backend usa
+    hoje autenticação própria via JWT (`OAuth2PasswordRequestForm` +
+    tokens de acesso/refresh), não Auth0.
 
 ## 3. Arquitetura funcional
 
@@ -210,6 +230,18 @@ Permissões já usadas ou previstas no seed:
 A matriz efetiva de permissões depende do estado atual da base de dados
 e do ficheiro de seed. Algumas permissões e atribuições foram ajustadas
 manualmente durante os testes.
+
+**Gap real encontrado e corrigido:** a role `user` (atribuída por
+omissão no registo — a usada pela app móvel) não tinha
+`companies:create` nem `projects:read`/`projects:create`. Um utilizador
+recém-registado conseguia autenticar-se mas nunca conseguia criar a sua
+própria empresa nem projeto — ficava bloqueado logo no onboarding.
+Corrigido em `app/modules/identity/seed.py`. **Importante:** `seed_rbac`
+é aditivo (nunca remove permissões existentes), por isso numa base de
+dados já semeada antes desta correção é preciso chamar outra vez
+`POST /api/v1/identity/seed-rbac` (sem autenticação, pensado para
+bootstrap) para as roles existentes passarem a ter as permissões novas
+— editar só o `seed.py` não as aplica retroativamente.
 
 **Pendente:** consolidar todas as roles e permissões no seed
 idempotente, garantir que uma instalação nova recebe o mesmo conjunto de
@@ -408,6 +440,9 @@ Tabelas que foram confirmadas nas migrations ou no desenvolvimento:
 -   `projects`
 -   `devices`
 -   `datastreams`
+-   `datastream_values`
+-   `dashboards`
+-   `widgets`
 
 A lista deve ser comparada com as migrations e a base de dados atual
 antes de se considerar um inventário definitivo.
@@ -465,6 +500,51 @@ PATCH  /api/v1/datastreams/{datastream_id}
 DELETE /api/v1/datastreams/{datastream_id}
 ```
 
+### Dashboards e widgets
+
+``` text
+POST   /api/v1/dashboards
+GET    /api/v1/dashboards/projects/{project_id}
+GET    /api/v1/dashboards/{dashboard_id}
+PATCH  /api/v1/dashboards/{dashboard_id}
+DELETE /api/v1/dashboards/{dashboard_id}
+POST   /api/v1/dashboards/{dashboard_id}/widgets
+GET    /api/v1/dashboards/{dashboard_id}/widgets
+PATCH  /api/v1/dashboards/widgets/{widget_id}
+DELETE /api/v1/dashboards/widgets/{widget_id}
+```
+
+Os dashboards guardam nome, descrição e layout JSON por projeto. Cada
+widget guarda tipo, configuração, posição e referência a um Datastream
+do mesmo projeto. A API verifica acesso ao projeto; apenas o proprietário
+do projeto pode criar, alterar ou eliminar dashboards e widgets. A tela
+mobile lista/cria dashboards, associa widgets de valor, gráfico e
+controlo e consulta valores atuais/histórico pelos endpoints existentes.
+
+### Automações e notificações
+
+``` text
+POST   /api/v1/automations
+GET    /api/v1/automations/projects/{project_id}
+PATCH  /api/v1/automations/{rule_id}
+DELETE /api/v1/automations/{rule_id}
+GET    /api/v1/notifications
+PATCH  /api/v1/notifications/{notification_id}
+POST   /api/v1/notifications/read-all
+```
+
+As regras suportam condições numéricas (`<`, `>` ou `=`) e criam uma
+notificação interna quando um valor recebido satisfaz a condição. Há um
+intervalo configurável entre notificações repetidas. A criação de regras
+é restrita ao proprietário do projeto. A ação pode também controlar um
+Datastream booleano do mesmo projeto. O backend grava o comando numa fila
+transacional e publica com QoS 1 em
+`ciao/devices/{device_uuid}/commands/{key}`, com payload
+`{"command_id":"…","value":true,"created_at":"…"}` e repetição em
+caso de falha. O firmware deve subscrever esse tópico e tratar
+`command_id` de forma idempotente. Envio push/e-mail ainda não está
+implementado.
+
 A documentação interativa deve estar disponível em:
 
 ``` text
@@ -474,6 +554,15 @@ http://127.0.0.1:8000/docs
 A lista acima documenta os caminhos definidos durante o desenvolvimento;
 a aplicação local e o OpenAPI são a referência final para confirmar o
 estado atual.
+
+### CORS
+
+Middleware adicionado em `app/main.py` (`CORSMiddleware`, `allow_origins=["*"]`,
+sem credentials) para o frontend Expo conseguir chamar a API a partir de
+origens variáveis em dev (web local, túneis, IP de rede do telemóvel).
+**É uma configuração de desenvolvimento, não de produção** — antes de
+produção, restringir `allow_origins` ao(s) domínio(s) reais do
+frontend.
 
 ## 8. Ambiente de desenvolvimento
 
@@ -557,11 +646,16 @@ Migrações relevantes no estado registado:
   `8d2ffbf01604`   Adição de `company_id` aos projetos
   `f4ca78204707`   Criação da tabela `devices`
   `ea839d03eea6`   Criação da tabela `datastreams`
+  `71ab22e046a1`   Criação de dashboards e widgets
+  `9d31c640a72b`   Criação de regras de automação e notificações
+  `5b8cf21ad804`   Fila de comandos MQTT para atuadores
 
 O estado confirmado mais recente foi:
 
 ``` text
-ea839d03eea6 (head)
+Migration `5b8cf21ad804` aplicada segundo confirmação do utilizador. As
+alterações atuais de autenticação EMQX não adicionam tabelas nem exigem
+nova migration.
 ```
 
 ### Cuidado com autogenerate
@@ -619,6 +713,16 @@ Ao gerar novas migrations:
 -   Modelo de histórico de valores (`datastream_values`), validação de
     tipo contra `data_type`, API de valor atual e histórico com
     filtros de tempo e paginação.
+-   Dashboards/widgets: testes de CRUD básico e rejeição de associação
+    a Datastream de outro projeto (`tests/test_dashboards.py`).
+-   Automações/notificações: testes de criação de regra, geração de
+    notificação, cooldown, marcação de leitura, tipo numérico e acesso
+    ao projeto (`tests/test_automations.py`).
+-   Comandos MQTT: teste de criação na fila e publicação QoS 1 no tópico
+    do dispositivo com o worker (`tests/test_automations.py`).
+-   Heartbeat: teste de transição para offline após timeout e manutenção
+    do estado online para dispositivos com heartbeat recente
+    (`tests/test_mqtt_heartbeat.py`).
 -   Bug real corrigido: `devices/api.py` e `datastreams/api.py`
     importavam `get_db` de `app.db.session`, enquanto os restantes
     módulos (e `get_current_user`) importavam de `app.db.dependencies`
@@ -636,6 +740,42 @@ Ao gerar novas migrations:
     (requer `users:update`) para um admin promover outro utilizador. Um
     script `app/scripts/promote_admin.py <email>` permite promover o
     primeiro admin manualmente.
+
+### Integração frontend ↔ backend --- bugs reais encontrados e corrigidos
+
+-   **CORS inexistente**: não havia `CORSMiddleware` nenhum em
+    `app/main.py`. Testar a partir do browser (Expo web) falhava
+    silenciosamente (erro de CORS no fetch, sem detalhe visível na UI) —
+    parecia "não há ligação ao servidor". Corrigido (ver secção 7).
+-   **Porta por omissão errada no frontend**: `frontend/src/api/client.ts`
+    tinha `DEFAULT_API_URL` a apontar para a porta `8010`; o `.env` do
+    backend define `PORT=8000`. Corrigido para `8000`.
+-   **Dois servidores a disputar a mesma porta**: durante os testes desta
+    sessão chegaram a correr ao mesmo tempo um `run_dev.py` em
+    background e um `uvicorn --reload` manual, ambos a tentar a porta
+    `8000` — comportamento imprevisível de qual respondia a cada pedido.
+    Confirmar sempre com `Get-NetTCPConnection -LocalPort 8000` (Windows)
+    antes de assumir que só há um processo a servir a API.
+-   **`fetch` do React Native não define `Content-Type` sozinho para
+    body `URLSearchParams`**: ao contrário do browser, que o faz
+    automaticamente. O login (`OAuth2PasswordRequestForm`, espera
+    `application/x-www-form-urlencoded`) funcionava em Expo web mas
+    devolvia `422 Unprocessable Content` num telemóvel real. Corrigido
+    em `client.ts` definindo o header explicitamente.
+-   **Sem forma de configurar o URL da API antes de autenticar**: o ecrã
+    Definições só era alcançável a partir de Perfil, que exige sessão —
+    um utilizador num telemóvel novo não conseguia sequer chegar a
+    mudar o URL do `localhost` por omissão para o IP da rede local.
+    Corrigido com um atalho (ícone de engrenagem) no ecrã de boas-vindas
+    (`app/index.tsx`), acessível sem sessão.
+-   **Backend tem de escutar em `0.0.0.0`, não só `127.0.0.1`**, para ser
+    alcançável por um telemóvel físico na mesma rede Wi-Fi — `uvicorn
+    app.main:app --reload` sem `--host` só aceita o próprio PC. Usar
+    `run_dev.py`, que já define isto.
+-   **Dependência `expo-linking` ausente** do `package.json`, apesar de
+    ser exigida pelo `expo-router` em runtime — o bundling falhava com
+    `Unable to resolve "expo-linking"`. Corrigido com
+    `npx expo install expo-linking`.
 
 ### Ainda por confirmar
 
@@ -690,15 +830,18 @@ Ao gerar novas migrations:
     um admin; `app/scripts/promote_admin.py` faz o bootstrap do
     primeiro admin.
 
-### Prioridade 3 --- segurança de dispositivos (não iniciado)
+### Prioridade 3 --- segurança de dispositivos (parcial)
 
--   [ ] Definir como o token de dispositivo é mostrado/provisionado pela
-    primeira vez.
+-   [x] Mostrar o token de dispositivo apenas uma vez na resposta de
+    criação e disponibilizar o fluxo de provisionamento na app.
 -   [x] Não devolver segredos em respostas normais (confirmado por
     teste: `DeviceResponse` não expõe `token`/`mqtt_password`).
--   [ ] Definir armazenamento e rotação de credenciais MQTT.
--   [ ] Implementar autenticação/autorização entre dispositivo e broker.
--   [ ] Definir estados e heartbeat (`online`, `offline`, `last_seen`).
+-   [x] Armazenar a password MQTT em hash e não a devolver após a criação.
+-   [ ] Implementar rotação/reprovisionamento de credenciais MQTT.
+-   [x] Implementar autenticação/autorização dispositivo-broker via HTTP
+    authenticator e ACL por dispositivo no EMQX.
+-   [x] Atualizar `online`/`last_seen` ao receber telemetria e marcar o dispositivo `offline` após timeout sem heartbeat.
+-   [x] Configurar timeout/frequência com `MQTT_DEVICE_OFFLINE_AFTER_SECONDS` (120s) e `MQTT_HEARTBEAT_CHECK_INTERVAL_SECONDS` (30s).
 -   [ ] Considerar enums e validações para `status` e `data_type`.
 
 ### Prioridade 4 --- valores e histórico dos Datastreams (✅ concluído)
@@ -716,7 +859,7 @@ Ao gerar novas migrations:
     (`GET /{datastream_id}/values`, com `since`/`until`/`limit`/
     `offset`).
 
-### Prioridade 5 --- MQTT (✅ concluído, com uma ressalva)
+### Prioridade 5 --- MQTT (implementado; falta configurar segredo local)
 
 -   [x] Implementar conexão com broker MQTT/EMQX — cliente `aiomqtt`,
     gerido pelo `lifespan` de `app/main.py` (tarefa em background,
@@ -730,11 +873,17 @@ Ao gerar novas migrations:
     inclui `{"token": "<device.token>", "value": ...}` e
     `app/modules/mqtt/ingest.py` verifica o token (comparação em tempo
     constante) contra o dispositivo indicado no tópico antes de aceitar
-    qualquer valor. **Ressalva**: o broker em si (EMQX em produção)
-    continua sem autenticação/ACL por dispositivo configurada — isso é
-    config do broker, fora do código Python; os campos `mqtt_username`/
-    `mqtt_password` já existem e são preenchidos na criação do Device
-    (password só em hash) precisamente para esse passo futuro.
+    qualquer valor.
+-   [x] Autenticar e autorizar no broker EMQX: `app/modules/mqtt/auth.py`
+    valida credenciais MQTT individuais e devolve ACL para publicar apenas
+    nos datastreams ativos do dispositivo e subscrever os respetivos
+    comandos. O utilizador de serviço da API fica limitado a
+    `ciao/devices/#`. Configuração em `backend/emqx/base.hocon`.
+-   [ ] Definir `EMQX_AUTH_SECRET` no `backend/.env` com valor aleatório
+    forte e reiniciar `docker compose up -d --build`. O Compose fixa EMQX
+    em 5.10.5 para suportar ACLs na resposta HTTP. Gerar o valor em
+    PowerShell com `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+    e colocá-lo no `.env` como `EMQX_AUTH_SECRET=<valor-gerado>`.
 -   [x] Validar mensagens recebidas e associá-las ao Device/Datastream —
     tipo do valor validado contra `Datastream.data_type`; `Device`
     passa a `status="online"` e `last_seen` é atualizado a cada
@@ -759,20 +908,37 @@ Corrigido no modelo + migration `203bf690c532`.
 
 ### Prioridade 6 --- Dashboards, widgets e automações
 
--   [ ] Definir modelos e CRUD de dashboards.
--   [ ] Definir widgets e associação aos Datastreams.
--   [ ] Implementar leitura de dados para gráficos e indicadores.
--   [ ] Implementar regras de automação.
--   [ ] Implementar notificações e alertas.
+-   [x] Definir modelos persistidos e CRUD de dashboards por projeto.
+-   [x] Definir widgets persistidos, associados a Datastreams do mesmo projeto.
+-   [x] Aplicar a migration e validar endpoints de dashboards/widgets em ambiente de desenvolvimento.
+-   [x] Ligar o ecrã mobile à listagem/criação de dashboards e widgets persistidos.
+-   [x] Apresentar valores atuais e histórico nos widgets de valor/gráfico; controlar Datastreams booleanos.
+-   [x] Criar/consultar/alterar/eliminar regras numéricas de automação com intervalo de repetição.
+-   [x] Gerar notificações internas quando uma regra é satisfeita e permitir marcá-las como lidas.
+-   [x] Implementar e testar em `ciao_test` a fila e publicação MQTT QoS 1 para Datastreams booleanos, com repetição em caso de falha.
+-   [x] Ligar as telas mobile de automações e notificações à API.
+-   [x] Aplicar as migrations e validar os fluxos backend de automação/notificação na base de testes.
+-   [ ] Confirmar o worker de comandos com o broker EMQX configurado.
+-   [ ] Implementar suporte no firmware para subscrever e executar comandos MQTT.
+-   [ ] Implementar envio push/e-mail.
 -   [ ] Definir permissões de partilha de dashboards e projetos.
 
-### Prioridade 7 --- frontend e operação
+### Prioridade 7 --- frontend e operação (parcial)
 
--   [ ] Confirmar/implementar frontend React.
--   [ ] Integrar login, empresas, projetos, dispositivos e Datastreams.
--   [ ] Criar páginas de dashboard e gestão de dispositivos.
+-   [x] Frontend implementado como app Expo/React Native (`frontend/`),
+    não o React web originalmente previsto — ver `frontend/README.md`.
+-   [x] Integrar login, registo, empresas, projetos, dispositivos e
+    Datastreams à API real (`frontend/src/api/`, com
+    `@tanstack/react-query` + `expo-secure-store`).
+-   [x] Página de dashboard (`app/dashboards.tsx`) ligada a dados reais
+    de datastreams/valores.
+-   [x] Ligar as telas de automações e notificações à API backend.
+-   [ ] Implementar notificações push/e-mail; atualmente são visíveis na app.
+-   [ ] Ecrã de perfil é só leitura (não há `PATCH /identity/me` no
+    backend) e o de recuperação de password é um placeholder (não há
+    endpoint de reset).
 -   [ ] Configurar logs estruturados e tratamento uniforme de erros.
--   [ ] Configurar testes e pipeline CI.
+-   [ ] Configurar testes e pipeline CI (frontend e backend).
 -   [ ] Definir Docker/deployment, secrets, backups e monitorização.
 -   [ ] Documentar instalação de produção e estratégia de atualização.
 
@@ -781,24 +947,27 @@ Corrigido no modelo + migration `203bf690c532`.
 Ordem recomendada para evitar avançar sobre uma base incompleta:
 
 1.  ✅ Terminar e testar o CRUD de Datastreams.
-2.  ✅ Criar testes automatizados para os módulos existentes (29 testes
+2.  ✅ Criar testes automatizados para os módulos existentes (49 testes
     em `backend/tests/`, ver secção 10).
 3.  🟡 Consolidar RBAC e regras de autorização por empresa/projeto —
     gaps concretos resolvidos (role por omissão, endpoint de promoção,
     seed corrigido); a matriz role-global-vs-papel-na-empresa continua
     por decidir.
 4.  ✅ Criar o modelo de histórico de valores.
-5.  ✅ Implementar a integração MQTT — broker local de teste (`amqtt`,
-    por decisão explícita em vez de Docker/EMQX nesta sessão), cliente
-    `aiomqtt`, autenticação por mensagem via token do Device, 12 testes
-    (unitários + ponta a ponta com broker real). Produção continua a
-    apontar para um broker real (EMQX) via `.env`; falta só a
-    autenticação/ACL ao nível do *broker* (config de infra, não app).
-6.  ⬜ Implementar dashboards e widgets — **não iniciado**.
-7.  ⬜ Ligar o frontend à API — **não iniciado**: requer confirmar se já
-    existe algum código de frontend React ou se começa do zero.
+5.  🟡 Integração MQTT — cliente `aiomqtt`, token no payload e autenticação
+    HTTP/ACL por dispositivo no EMQX estão implementados. Definir
+    `EMQX_AUTH_SECRET` no `backend/.env`, reiniciar o Compose e validar
+    autenticação e publicação/subscrição com o broker em execução.
+6.  🟡 Dashboards, widgets e automações — CRUD e fluxos mobile ligados;
+    regras numéricas geram notificações internas e enfileiram comandos.
+    Falta validar o worker com EMQX, implementar o contrato no firmware,
+    adicionar push/e-mail e decidir permissões de partilha.
+7.  🟡 Frontend — fluxos principais ligados à API. Falta implementar
+    push/e-mail, edição de perfil e recuperação de password; rever erros
+    e integração contínua.
 8.  ⬜ Preparar ambiente de produção, observabilidade e segurança —
-    **não iniciado**.
+    **não iniciado** (CORS em dev está permissivo de propósito — ver
+    secção 7).
 
 ## 13. Segurança e observações técnicas
 
@@ -808,13 +977,10 @@ Ordem recomendada para evitar avançar sobre uma base incompleta:
     endpoint de criação (`DeviceCreateResponse`) os devolve, uma única
     vez, em texto simples — `mqtt_password` fica só em hash na BD a
     partir daí; se se perderem, o dispositivo tem de ser reprovisionado.
--   Mensagens MQTT são autenticadas por aplicação (token no payload,
-    comparado em tempo constante — ver `app/modules/mqtt/ingest.py`), não
-    pelo broker. Em produção falta configurar auth/ACL por dispositivo
-    no próprio broker (ex. plugin de auth do EMQX); sem isso, qualquer
-    cliente ligado ao broker pode publicar em qualquer tópico de
-    dispositivo (só não consegue que a mensagem seja aceite sem o
-    token certo).
+-   Mensagens MQTT são autenticadas pelo broker com credenciais individuais
+    e ACL por dispositivo; a ingestão também compara o token do payload
+    em tempo constante. Configurar TLS nos listeners e no tráfego entre
+    EMQX e API antes de expor estes serviços fora da rede local.
 -   Validar autorização em cada endpoint com base no recurso e no
     utilizador, não apenas por conhecer um UUID.
 -   A validação de unicidade no serviço deve ser complementada por uma
@@ -877,18 +1043,25 @@ Ordem recomendada para evitar avançar sobre uma base incompleta:
                                       API de atual + histórico); retenção
                                       ainda não definida
 
-  MQTT ponta a ponta                  Implementado e testado (broker
-                                      local de teste + cliente aiomqtt);
-                                      falta auth/ACL ao nível do broker
-                                      em produção (config EMQX, não app)
+  MQTT ponta a ponta                  Implementado (broker local de teste
+                                      + cliente aiomqtt); auth/ACL EMQX
+                                      configurados em código; falta definir
+                                      `EMQX_AUTH_SECRET` e validar Compose
 
-  Dashboards/widgets                  Pendente — não iniciado
+  Dashboards/widgets                  CRUD, migration e integração mobile
+                                      criados e cobertos por testes
 
-  Automações/notificações             Pendente — não iniciado
+  Automações/notificações             Regras, notificações internas e fila
+                                      MQTT de comandos implementadas e
+                                      testadas; falta firmware e push/e-mail
 
-  Frontend React integrado            Por confirmar/concluir
+  Heartbeat de dispositivos           Online/offline por last_seen implementado;
+                                      timeout padrão de 120s
 
-  Testes automatizados/CI             41 testes pytest (backend/tests/);
+  Frontend (Expo/React Native)        Fluxos principais, dashboards/widgets,
+                                      automações e notificações ligados à API
+
+  Testes automatizados/CI             49 testes pytest (backend/tests/);
                                       sem pipeline CI
 
   Deploy de produção                  Pendente

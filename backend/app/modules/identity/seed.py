@@ -96,6 +96,12 @@ DEFAULT_ROLES = {
             "devices:update",
 
             "companies:read",
+            # Um utilizador recém-registado (app móvel) tem de conseguir
+            # criar a sua própria empresa para começar a usar a
+            # plataforma - sem isto ficava preso logo no onboarding.
+            "companies:create",
+            "projects:read",
+            "projects:create",
         ],
     },
 }

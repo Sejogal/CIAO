@@ -11,6 +11,7 @@ from app.modules.datastream_values.service import value_matches_data_type
 from app.modules.datastreams.repository import DatastreamRepository
 from app.modules.devices.repository import DeviceRepository
 from app.modules.mqtt.topics import parse_value_topic
+from app.modules.automation.service import AutomationService
 
 
 @dataclass
@@ -31,12 +32,10 @@ async def ingest_message(
     kill the subscriber loop, it just gets logged and dropped.
 
     Payload contract: {"token": "<device.token>", "value": <any>,
-    "recorded_at": "<iso timestamp, optional>"}. The broker itself is not
-    configured to authenticate or scope individual devices (that needs an
-    EMQX auth plugin wired to this same `devices` table - not done yet,
-    see README_CIAO.md Prioridade 3/5), so `token` is how *this app*
-    verifies the publisher actually is the device named in the topic,
-    regardless of what the broker already let through.
+    "recorded_at": "<iso timestamp, optional>"}. EMQX authenticates
+    individual MQTT credentials and topic ACLs through its HTTP authenticator.
+    The payload token remains a second application-level check before the
+    value is accepted.
     """
 
     parsed_topic = parse_value_topic(topic)
@@ -93,6 +92,12 @@ async def ingest_message(
             value=value,
             recorded_at=recorded_at,
         ),
+    )
+
+    await AutomationService.evaluate(
+        db=db,
+        datastream_id=datastream.id,
+        value=value,
     )
 
     await DeviceRepository.update(

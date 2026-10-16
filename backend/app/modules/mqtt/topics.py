@@ -14,6 +14,10 @@ def build_value_topic(device_uuid: str, key: str) -> str:
     return f"ciao/devices/{device_uuid}/datastreams/{key}"
 
 
+def build_command_topic(device_uuid: str, key: str) -> str:
+    return f"ciao/devices/{device_uuid}/commands/{key}"
+
+
 def parse_value_topic(topic: str) -> tuple[str, str] | None:
     match = _VALUE_TOPIC_RE.match(topic)
     if not match:

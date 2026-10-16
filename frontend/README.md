@@ -38,6 +38,19 @@ npm run typecheck
 - Navegação inferior persistente nas áreas principais
 - Fluxos de login, registo, empresas, projetos, dispositivos, datastreams, dashboards, automações, notificações, perfil e definições
 
-## Observação
+## Integração com a API
 
-Os dados continuam em memória como no protótipo web. A integração com a API `https://api.ciao.ao/api/v1` pode ser ligada posteriormente sem alterar a estrutura principal das telas.
+Ligado ao backend real do CIAO (`@tanstack/react-query` + um cliente `fetch` próprio em `src/api/`):
+
+- **Já ligado à API**: autenticação (login/registo/sessão via `expo-secure-store`), empresas, projetos, dispositivos, datastreams/valores, dashboards/widgets, regras de automação e notificações internas.
+- **Ainda sem integração externa**: notificações push/e-mail. Comandos de atuador já são publicados pelo backend em MQTT; o firmware precisa subscrever o tópico de comando e aplicar o valor recebido.
+- Não há endpoint de recuperação de palavra-passe nem de edição de perfil; os ecrãs correspondentes refletem essa limitação em vez de simular algo que a API não suporta.
+
+### Configurar o URL do backend
+
+O URL por defeito é `http://localhost:8000/api/v1` (`src/api/client.ts`), pensado para testar no browser (`npm run web`) com o backend a correr localmente. Para testar num emulador Android ou num telemóvel físico, define o URL correto no ecrã **Definições** da app (acessível também a partir do ecrã inicial, antes de entrar, pelo ícone de engrenagem):
+
+- Emulador Android: `http://10.0.2.2:8000/api/v1`
+- Telemóvel físico (mesma rede Wi-Fi do PC): `http://<IP local do PC>:8000/api/v1`
+
+O backend (`ciao/backend`) tem de estar a correr e acessível nessa rede — ver o README desse projeto para o arrancar com `run_dev.py`, que já escuta em todas as interfaces.

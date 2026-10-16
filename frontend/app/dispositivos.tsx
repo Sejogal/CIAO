@@ -1,2 +1,40 @@
-import {useState} from "react";import {View,Text,Pressable,TextInput} from "react-native";import {useRouter} from "expo-router";import {useStore} from "@/store";import {C,s,Header,BottomNav,Card,Status,Chips,Empty,Button} from "@/ui";
-export default function Devices(){const r=useRouter(),{devices,projects}=useStore();const[q,setQ]=useState(""),[f,setF]=useState("all");const list=devices.filter(d=>(f==="all"||(f==="on")===d.online)&&`${d.name} ${d.model} ${d.serial}`.toLowerCase().includes(q.toLowerCase()));return <View style={s.safe}><View style={s.content}><Header title="Dispositivos" subtitle={`${devices.length} registados`} right={<Pressable onPress={()=>r.push("/dispositivos/novo")} style={s.icon}><Text style={{fontSize:24,color:C.primary}}>+</Text></Pressable>}/><TextInput value={q} onChangeText={setQ} placeholder="Nome, modelo ou nº de série" style={s.input}/><Chips value={f} onChange={setF} options={[{value:"all",label:"Todos"},{value:"on",label:"Online"},{value:"off",label:"Offline"}]}/>{!list.length?<Empty icon="hardware-chip-outline" title="Nenhum dispositivo" text="Registe o seu primeiro ESP32 ou ESP8266." action={<Button onPress={()=>r.push("/dispositivos/novo")}>Registar</Button>}/>:list.map(d=><Pressable key={d.id} onPress={()=>r.push(`/dispositivos/${d.id}`)}><Card style={{flexDirection:"row",alignItems:"center"}}><View style={{width:44,height:44,borderRadius:13,backgroundColor:C.soft,alignItems:"center",justifyContent:"center"}}><Text>⚙</Text></View><View style={{flex:1}}><Text style={s.h2}>{d.name}</Text><Text style={s.muted}>{d.model} · fw {d.firmware} · {projects.find(p=>p.id===d.projectId)?.name}</Text><Text style={s.muted}>Última comunicação: {d.lastSeen}</Text></View><Status online={d.online}/></Card></Pressable>)}<BottomNav/></View></View>}
+import { useState } from "react";
+import { View, Text, Pressable, TextInput } from "react-native";
+import { useRouter } from "expo-router";
+import { s, Header, BottomNav, Card, Status, Chips, Empty, Button, Loading } from "@/ui";
+import { useAllDevices } from "@/api/devices";
+import { useProjects } from "@/api/projects";
+export default function Devices() {
+  const r = useRouter();
+  const devicesQuery = useAllDevices();
+  const projectsQuery = useProjects();
+  const projects = projectsQuery.data ?? [];
+  const [q, setQ] = useState("");
+  const [f, setF] = useState("all");
+  const list = devicesQuery.data.filter((d) => (f === "all" || (f === "on") === (d.status === "online")) && `${d.name} ${d.model ?? ""} ${d.serial ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <View style={s.safe}>
+      <View style={s.content}>
+        <Header title="Dispositivos" subtitle={`${devicesQuery.data.length} registados`} right={<Pressable onPress={() => r.push("/dispositivos/novo")} style={s.icon}><Text style={{ fontSize: 24, color: "#2563EB" }}>+</Text></Pressable>} />
+        <TextInput value={q} onChangeText={setQ} placeholder="Nome, modelo ou nº de série" style={s.input} />
+        <Chips value={f} onChange={setF} options={[{ value: "all", label: "Todos" }, { value: "on", label: "Online" }, { value: "off", label: "Offline" }]} />
+        {devicesQuery.isLoading && <Loading />}
+        {!devicesQuery.isLoading && !list.length && <Empty icon="hardware-chip-outline" title="Nenhum dispositivo" text="Registe o seu primeiro ESP32 ou ESP8266." action={<Button onPress={() => r.push("/dispositivos/novo")}>Registar</Button>} />}
+        {list.map((d) => (
+          <Pressable key={d.id} onPress={() => r.push(`/dispositivos/${d.id}`)}>
+            <Card style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 44, height: 44, borderRadius: 13, backgroundColor: "#EEF4FF", alignItems: "center", justifyContent: "center" }}><Text>⚙</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.h2}>{d.name}</Text>
+                <Text style={s.muted}>{d.model || "—"} · {projects.find((p) => p.id === d.project_id)?.name}</Text>
+                <Text style={s.muted}>Última comunicação: {d.last_seen ? new Date(d.last_seen).toLocaleString("pt-PT") : "nunca"}</Text>
+              </View>
+              <Status online={d.status === "online"} />
+            </Card>
+          </Pressable>
+        ))}
+        <BottomNav />
+      </View>
+    </View>
+  );
+}
