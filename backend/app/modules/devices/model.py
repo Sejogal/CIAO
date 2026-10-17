@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
@@ -11,6 +11,9 @@ from app.db.base import BaseEntity
 
 class Device(BaseEntity):
     __tablename__ = "devices"
+    __table_args__ = (
+        CheckConstraint("status IN ('online', 'offline')", name="ck_devices_status"),
+    )
 
     project_id: Mapped[UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),

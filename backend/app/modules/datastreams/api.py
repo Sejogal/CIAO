@@ -10,7 +10,7 @@ from app.modules.datastreams.schema import (
     DatastreamUpdate,
 )
 from app.modules.datastreams.service import DatastreamService
-from app.modules.identity.dependencies import get_current_user
+from app.modules.identity.dependencies import get_current_user, require_permission
 from app.modules.identity.model import User
 
 
@@ -21,6 +21,7 @@ router = APIRouter(tags=["Datastreams"])
     "/devices/{device_id}",
     response_model=DatastreamResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("datastreams:create"))],
 )
 async def create_datastream(
     device_id: UUID,
@@ -43,7 +44,7 @@ async def create_datastream(
 async def list_device_datastreams(
     device_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:read")),
 ):
     return await DatastreamService.list_by_device(
         db=db,
@@ -59,7 +60,7 @@ async def list_device_datastreams(
 async def get_datastream(
     datastream_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:read")),
 ):
     return await DatastreamService.get_for_user(
         db=db,
@@ -77,7 +78,7 @@ async def update_datastream(
     datastream_id: UUID,
     data: DatastreamUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:update")),
 ):
     return await DatastreamService.update(
         db=db,
@@ -94,7 +95,7 @@ async def update_datastream(
 async def delete_datastream(
     datastream_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:delete")),
 ):
     await DatastreamService.delete(
         db=db,

@@ -14,6 +14,24 @@ from app.modules.projects.service import ProjectService
 class DeviceService:
 
     @staticmethod
+    async def require_project_owner(
+        db: AsyncSession,
+        project_id: UUID,
+        user_id: UUID,
+    ):
+        project = await ProjectService.get_for_user(
+            db=db,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        if project.owner_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the project owner can manage devices and datastreams",
+            )
+        return project
+
+    @staticmethod
     async def create(
         db: AsyncSession,
         user_id: UUID,
@@ -28,7 +46,7 @@ class DeviceService:
         """
 
         # Verifica se o utilizador tem acesso ao projeto
-        project = await ProjectService.get_for_user(
+        project = await DeviceService.require_project_owner(
             db=db,
             project_id=project_id,
             user_id=user_id,
@@ -63,6 +81,37 @@ class DeviceService:
             device=device,
         )
 
+        return device, token, mqtt_password
+
+    @staticmethod
+    async def rotate_credentials(
+        db: AsyncSession,
+        device_id: UUID,
+        user_id: UUID,
+    ) -> tuple[Device, str, str]:
+        """Replace device secrets and return plaintext credentials once."""
+        device = await DeviceService.get_for_user(
+            db=db,
+            device_id=device_id,
+            user_id=user_id,
+        )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
+            user_id=user_id,
+        )
+        token = token_urlsafe(32)
+        mqtt_password = token_urlsafe(24)
+        device = await DeviceRepository.update(
+            db=db,
+            device=device,
+            data={
+                "token": token,
+                "mqtt_password": hash_password(mqtt_password),
+                "status": "offline",
+                "last_seen": None,
+            },
+        )
         return device, token, mqtt_password
 
     @staticmethod
@@ -124,6 +173,11 @@ class DeviceService:
             device_id=device_id,
             user_id=user_id,
         )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
+            user_id=user_id,
+        )
 
         update_data = data.model_dump(
             exclude_unset=True
@@ -148,6 +202,11 @@ class DeviceService:
         device = await DeviceService.get_for_user(
             db=db,
             device_id=device_id,
+            user_id=user_id,
+        )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
             user_id=user_id,
         )
 

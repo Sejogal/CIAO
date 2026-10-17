@@ -20,7 +20,10 @@ from app.modules.identity.schemas import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UserSelfUpdate,
     UserRoleUpdate,
+    PasswordResetRequest,
+    PasswordResetConfirm,
 )
 
 from app.modules.identity.service import IdentityService
@@ -112,6 +115,42 @@ async def me(
     }
 
 
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+)
+async def update_me(
+    data: UserSelfUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await IdentityService.update_self(db, current_user, data)
+
+    stmt = (
+        select(User)
+        .options(selectinload(User.role).selectinload(Role.permissions))
+        .where(User.id == current_user.id)
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one()
+    permissions = [
+        permission.name for permission in user.role.permissions
+    ] if user.role else []
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "avatar": user.avatar,
+        "language": user.language,
+        "timezone": user.timezone,
+        "is_active": user.is_active,
+        "is_verified": user.is_verified,
+        "role": user.role,
+        "permissions": permissions,
+    }
+
+
 #refresh
 @router.post(
     "/refresh",
@@ -148,6 +187,26 @@ async def logout(
     return {
         "message": "Logout realizado com sucesso"
     }
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    data: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await IdentityService.request_password_reset(db, data.email)
+    return {
+        "message": "Se existir uma conta para este email, recebera instrucoes para redefinir a palavra-passe."
+    }
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset(
+    data: PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+):
+    await IdentityService.reset_password(db, data.token, data.new_password)
+    return {"message": "Palavra-passe atualizada. Inicie sessao com a nova palavra-passe."}
 
 @router.patch(
     "/users/{user_id}/role",

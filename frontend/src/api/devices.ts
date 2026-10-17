@@ -81,3 +81,14 @@ export function useDeleteDevice() {
     onSuccess: () => qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "projects" || q.queryKey[0] === "devices" }),
   });
 }
+
+export function useRotateDeviceCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<DeviceWithSecrets>(`/devices/${id}/credentials/rotate`, { method: "POST" }),
+    onSuccess: (credentials) => {
+      setLastProvisioned(credentials);
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "projects" || q.queryKey[0] === "devices" });
+    },
+  });
+}

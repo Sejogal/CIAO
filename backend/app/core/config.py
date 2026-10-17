@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     MQTT_DEVICE_OFFLINE_AFTER_SECONDS: int = 120
     MQTT_HEARTBEAT_CHECK_INTERVAL_SECONDS: int = 30
 
+    MAIL_HOST: str | None = None
+    MAIL_PORT: int = 587
+    MAIL_USERNAME: str | None = None
+    MAIL_PASSWORD: str | None = None
+    MAIL_FROM: str | None = None
+    MAIL_STARTTLS: bool = True
+    PASSWORD_RESET_URL: str = "ciao://recuperar"
+    CORS_ALLOWED_ORIGINS: list[str] = []
+
     SECRET_KEY: str
 
     @property

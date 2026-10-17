@@ -26,6 +26,10 @@ npm run web
 npm run typecheck
 ```
 
+O workflow do GitHub Actions executa `npm ci` e `npm run typecheck` para
+cada push e pull request. A suíte backend também roda no workflow com
+PostgreSQL 17.
+
 ## Conversão realizada
 
 - Navegação TanStack Router → Expo Router
@@ -42,9 +46,10 @@ npm run typecheck
 
 Ligado ao backend real do CIAO (`@tanstack/react-query` + um cliente `fetch` próprio em `src/api/`):
 
-- **Já ligado à API**: autenticação (login/registo/sessão via `expo-secure-store`), empresas, projetos, dispositivos, datastreams/valores, dashboards/widgets, regras de automação e notificações internas.
+- **Já ligado à API**: autenticação (login/registo/sessão via `expo-secure-store`), perfil (editar nome, avatar, idioma e fuso horário), empresas, projetos, dispositivos, datastreams/valores, dashboards/widgets, regras de automação e notificações internas.
+- O cliente API normaliza erros HTTP, validação e falhas de rede; erros de consultas aparecem como aviso global e erros de formulários junto ao formulário.
 - **Ainda sem integração externa**: notificações push/e-mail. Comandos de atuador já são publicados pelo backend em MQTT; o firmware precisa subscrever o tópico de comando e aplicar o valor recebido.
-- Não há endpoint de recuperação de palavra-passe nem de edição de perfil; os ecrãs correspondentes refletem essa limitação em vez de simular algo que a API não suporta.
+- A recuperação de palavra-passe continua pendente; não há fluxo de reset com verificação do utilizador.
 
 ### Configurar o URL do backend
 

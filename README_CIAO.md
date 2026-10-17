@@ -649,13 +649,14 @@ Migrações relevantes no estado registado:
   `71ab22e046a1`   Criação de dashboards e widgets
   `9d31c640a72b`   Criação de regras de automação e notificações
   `5b8cf21ad804`   Fila de comandos MQTT para atuadores
+  `b2ac33f081e2`   Constraints para status de device e tipo de datastream
+  `c1d8e7a4f602`   Tokens de recuperacao de password de uso unico
 
 O estado confirmado mais recente foi:
 
 ``` text
-Migration `5b8cf21ad804` aplicada segundo confirmação do utilizador. As
-alterações atuais de autenticação EMQX não adicionam tabelas nem exigem
-nova migration.
+Migrations `b2ac33f081e2` e `c1d8e7a4f602` aplicadas na base local.
+O seed RBAC tambem foi executado para adicionar as permissoes de datastream.
 ```
 
 ### Cuidado com autogenerate
@@ -780,13 +781,13 @@ Ao gerar novas migrations:
 ### Ainda por confirmar
 
 -   Integração ponta a ponta MQTT → Datastream → armazenamento.
--   Matriz de permissões por role global vs. papel na empresa (RBAC
-    global e `CompanyMember.role` ainda são dois sistemas paralelos,
-    não unificados).
+-   [x] Matriz de acesso definida: permissao global habilita a operacao;
+    membro da empresa tem leitura; proprietario do projeto pode escrever.
+    CompanyMember.role nao eleva acesso de projeto; owner/admin podem gerir
+    membros da empresa quando tambem passam pelo RBAC global.
 -   Política de retenção de `datastream_values` (hoje não há purga/
     agregação; cresce indefinidamente).
--   Enums/validação para `Datastream.data_type` e `Device.status`
-    (continuam a ser `String` livre).
+-   [x] Enums/validacao de `Datastream.data_type` e `Device.status` aplicadas em schema e base de dados.
 
 ## 11. Trabalho pendente
 
@@ -811,17 +812,19 @@ Ao gerar novas migrations:
 
 -   [x] Consolidar roles/permissões no seed idempotente (corrigido bug
     real no `seed_rbac`; já era idempotente de resto).
--   [ ] Aplicar `require_permission` aos endpoints adequados (devices/
-    datastreams continuam a depender só de `get_current_user` +
-    verificação de posse; decisão deliberada por ora, não revista a
-    fundo).
--   [ ] Definir matriz de permissões por role global e por papel na
-    empresa (RBAC global e `CompanyMember.role` continuam paralelos,
-    não unificados — decisão de produto em aberto).
+-   [x] Aplicar `require_permission` aos endpoints de devices e
+    datastreams, por operacao (read/create/update/delete), mantendo
+    tambem a verificacao de acesso ao projeto/dispositivo no servico.
+    O seed idempotente agora inclui permissoes de datastream e as
+    associacoes correspondentes para as roles existentes.
+-   [x] Definir matriz: a role global precisa da permissao da operacao;
+    membros da empresa podem ler projetos; apenas o proprietario do projeto
+    pode alterar recursos. `CompanyMember.role` nao eleva estas permissoes;
+    owner/admin da empresa podem gerir membros, sempre com RBAC global.
 -   [x] Definir autorização para criar/alterar/eliminar projetos e
     dispositivos (via `require_permission` + posse de projeto).
--   [ ] Rever a política de acesso do proprietário do projeto e dos
-    membros da empresa (revisão ainda não feita a fundo).
+-   [x] Rever o acesso: membros da empresa consultam recursos do projeto; apenas o proprietario do projeto pode alterar projeto,
+    dispositivos, datastreams, dashboards, widgets e regras. As permissoes globais continuam a limitar cada operacao.
 -   [x] Adicionar testes automatizados de autorização (`tests/test_rbac.py`,
     `tests/test_identity_and_access.py`).
 -   [x] (Novo, não listado antes) Resolver o gap de utilizadores novos
@@ -837,12 +840,13 @@ Ao gerar novas migrations:
 -   [x] Não devolver segredos em respostas normais (confirmado por
     teste: `DeviceResponse` não expõe `token`/`mqtt_password`).
 -   [x] Armazenar a password MQTT em hash e não a devolver após a criação.
--   [ ] Implementar rotação/reprovisionamento de credenciais MQTT.
+-   [x] Rotacao de credenciais MQTT via `POST /api/v1/devices/{id}/credentials/rotate`; as antigas deixam de autenticar novas ligacoes e as novas sao exibidas uma vez. Reprovisione o dispositivo.
+    A integracao nao termina sessoes MQTT existentes; desligue o client antigo no EMQX durante a rotacao.
 -   [x] Implementar autenticação/autorização dispositivo-broker via HTTP
     authenticator e ACL por dispositivo no EMQX.
 -   [x] Atualizar `online`/`last_seen` ao receber telemetria e marcar o dispositivo `offline` após timeout sem heartbeat.
 -   [x] Configurar timeout/frequência com `MQTT_DEVICE_OFFLINE_AFTER_SECONDS` (120s) e `MQTT_HEARTBEAT_CHECK_INTERVAL_SECONDS` (30s).
--   [ ] Considerar enums e validações para `status` e `data_type`.
+-   [x] Restringir `Device.status` (online/offline) e `Datastream.data_type` (boolean/integer/float/string/json) em schemas e migration `b2ac33f081e2`.
 
 ### Prioridade 4 --- valores e histórico dos Datastreams (✅ concluído)
 
@@ -859,7 +863,7 @@ Ao gerar novas migrations:
     (`GET /{datastream_id}/values`, com `since`/`until`/`limit`/
     `offset`).
 
-### Prioridade 5 --- MQTT (implementado; falta configurar segredo local)
+### Prioridade 5 --- MQTT (implementado; falta validar o EMQX local)
 
 -   [x] Implementar conexão com broker MQTT/EMQX — cliente `aiomqtt`,
     gerido pelo `lifespan` de `app/main.py` (tarefa em background,
@@ -879,11 +883,8 @@ Ao gerar novas migrations:
     nos datastreams ativos do dispositivo e subscrever os respetivos
     comandos. O utilizador de serviço da API fica limitado a
     `ciao/devices/#`. Configuração em `backend/emqx/base.hocon`.
--   [ ] Definir `EMQX_AUTH_SECRET` no `backend/.env` com valor aleatório
-    forte e reiniciar `docker compose up -d --build`. O Compose fixa EMQX
-    em 5.10.5 para suportar ACLs na resposta HTTP. Gerar o valor em
-    PowerShell com `python -c "import secrets; print(secrets.token_urlsafe(48))"`
-    e colocá-lo no `.env` como `EMQX_AUTH_SECRET=<valor-gerado>`.
+-   [x] Gerar e guardar `EMQX_AUTH_SECRET` localmente em `backend/.env`, sem o adicionar ao repositorio.
+-   [ ] Reiniciar o Compose e validar autenticacao, publicacao e subscricao com EMQX em execucao.
 -   [x] Validar mensagens recebidas e associá-las ao Device/Datastream —
     tipo do valor validado contra `Datastream.data_type`; `Device`
     passa a `status="online"` e `last_seen` é atualizado a cada
@@ -921,7 +922,7 @@ Corrigido no modelo + migration `203bf690c532`.
 -   [ ] Confirmar o worker de comandos com o broker EMQX configurado.
 -   [ ] Implementar suporte no firmware para subscrever e executar comandos MQTT.
 -   [ ] Implementar envio push/e-mail.
--   [ ] Definir permissões de partilha de dashboards e projetos.
+-   [x] Definir partilha: sem convites externos; membros da empresa leem os recursos dos projetos e apenas o proprietario os altera.
 
 ### Prioridade 7 --- frontend e operação (parcial)
 
@@ -934,49 +935,39 @@ Corrigido no modelo + migration `203bf690c532`.
     de datastreams/valores.
 -   [x] Ligar as telas de automações e notificações à API backend.
 -   [ ] Implementar notificações push/e-mail; atualmente são visíveis na app.
--   [ ] Ecrã de perfil é só leitura (não há `PATCH /identity/me` no
-    backend) e o de recuperação de password é um placeholder (não há
-    endpoint de reset).
--   [ ] Configurar logs estruturados e tratamento uniforme de erros.
--   [ ] Configurar testes e pipeline CI (frontend e backend).
--   [ ] Definir Docker/deployment, secrets, backups e monitorização.
--   [ ] Documentar instalação de produção e estratégia de atualização.
+-   [x] Editar perfil pelo `PATCH /api/v1/identity/me`: nome, avatar,
+    idioma e fuso horário; email permanece somente leitura.
+-   [x] Recuperacao de password implementada com token de uso unico, validade de 30 minutos, hash no banco e revogacao de refresh tokens.
+    A entrega do link depende da configuracao SMTP no `backend/.env`.
+-   [x] Configurar logs estruturados do backend: saída JSON fora de DEBUG,
+    log por pedido HTTP com duração/status e `X-Request-ID` para correlação.
+-   [x] Uniformizar erros HTTP, validação e falhas de rede no cliente API;
+    falhas de consultas aparecem no toast global e erros de formulários
+    continuam junto ao respetivo formulário.
+-   [x] Configurar CI no GitHub Actions: suíte pytest com PostgreSQL e
+    typecheck TypeScript do frontend em push e pull request.
+-   [ ] Provisionar e operar o ambiente de producao (host, TLS, secrets, backups e monitorizacao).
+-   [x] Documentar preparacao, atualizacao, rollback e operacoes em `backend/DEPLOYMENT.md`.
 
-## 12. Próximas etapas recomendadas
+## 12. Proximas etapas recomendadas
 
-Ordem recomendada para evitar avançar sobre uma base incompleta:
-
-1.  ✅ Terminar e testar o CRUD de Datastreams.
-2.  ✅ Criar testes automatizados para os módulos existentes (49 testes
-    em `backend/tests/`, ver secção 10).
-3.  🟡 Consolidar RBAC e regras de autorização por empresa/projeto —
-    gaps concretos resolvidos (role por omissão, endpoint de promoção,
-    seed corrigido); a matriz role-global-vs-papel-na-empresa continua
-    por decidir.
-4.  ✅ Criar o modelo de histórico de valores.
-5.  🟡 Integração MQTT — cliente `aiomqtt`, token no payload e autenticação
-    HTTP/ACL por dispositivo no EMQX estão implementados. Definir
-    `EMQX_AUTH_SECRET` no `backend/.env`, reiniciar o Compose e validar
-    autenticação e publicação/subscrição com o broker em execução.
-6.  🟡 Dashboards, widgets e automações — CRUD e fluxos mobile ligados;
-    regras numéricas geram notificações internas e enfileiram comandos.
-    Falta validar o worker com EMQX, implementar o contrato no firmware,
-    adicionar push/e-mail e decidir permissões de partilha.
-7.  🟡 Frontend — fluxos principais ligados à API. Falta implementar
-    push/e-mail, edição de perfil e recuperação de password; rever erros
-    e integração contínua.
-8.  ⬜ Preparar ambiente de produção, observabilidade e segurança —
-    **não iniciado** (CORS em dev está permissivo de propósito — ver
-    secção 7).
+1. Aplicar a primeira execucao CI no GitHub apos push/PR.
+2. Reiniciar Compose quando Docker estiver ativo e validar EMQX auth,
+   ingestao MQTT e entrega do worker de comandos.
+3. Configurar SMTP para ativar recuperacao de password.
+4. Implementar push/e-mail de notificacoes e firmware de comandos; nao ha
+   firmware neste repositorio e a app ainda nao regista tokens push.
+5. Provisionar infraestrutura de producao conforme `backend/DEPLOYMENT.md`.
+6. Definir retencao/arquivo de valores antes de criar uma rotina de purga.
 
 ## 13. Segurança e observações técnicas
 
 -   Nunca incluir `.env`, passwords, tokens de acesso ou credenciais
     MQTT no repositório.
--   O `DeviceResponse` não deve expor `token` ou `mqtt_password`. Só o
-    endpoint de criação (`DeviceCreateResponse`) os devolve, uma única
-    vez, em texto simples — `mqtt_password` fica só em hash na BD a
-    partir daí; se se perderem, o dispositivo tem de ser reprovisionado.
+-   O `DeviceResponse` nao expoe `token` nem `mqtt_password`. Apenas
+    os endpoints de criacao/rotacao exibem segredos uma vez;
+    `mqtt_password` fica em hash na BD. Credenciais perdidas exigem
+    reprovisionamento do dispositivo.
 -   Mensagens MQTT são autenticadas pelo broker com credenciais individuais
     e ACL por dispositivo; a ingestão também compara o token do payload
     em tempo constante. Configurar TLS nos listeners e no tráfego entre
@@ -1004,68 +995,23 @@ Ordem recomendada para evitar avançar sobre uma base incompleta:
     `uvicorn app.main:app` normalmente, sem este problema.
 -   O código que compila não está necessariamente livre de erros de
     importação ou de execução; validar imports e testar endpoints.
--   Antes de produção, rever CORS, rate limiting, gestão de segredos,
-    logging, auditoria, backups, TLS e política de retenção de dados.
+-   Antes de producao, definir rate limiting, auditoria, backups, TLS e
+    retencao de dados; CORS exige origens explicitas quando `DEBUG=False`.
 
 ## 14. Estado atual resumido
 
-  -----------------------------------------------------------------------
-  Área                                Estado
-  ----------------------------------- -----------------------------------
-  Base FastAPI e organização modular  Implementada
-
-  PostgreSQL e SQLAlchemy assíncrono  Configurados no ambiente de
-                                      desenvolvimento
-
-  Alembic                             A funcionar; rever autogenerate
-                                      cuidadosamente
-
-  Identidade/autenticação             Implementada; hardening pendente
-
-  RBAC                                Gaps concretos resolvidos (role por
-                                      omissão, endpoint de promoção, seed
-                                      corrigido); matriz role-global vs.
-                                      papel-na-empresa por decidir
-
-  Empresas e membros                  CRUD e regras principais testados
-
-  Projetos                            CRUD e controlo de acesso testados
-
-  Dispositivos                        CRUD testado; credenciais MQTT
-                                      (token/mqtt_username/mqtt_password)
-                                      geradas e mostradas uma vez na
-                                      criação
-
-  Datastreams                         CRUD completo, testado (incluindo
-                                      409/400/404 e constraint única)
-
-  Histórico de valores                Implementado e testado (modelo,
-                                      API de atual + histórico); retenção
-                                      ainda não definida
-
-  MQTT ponta a ponta                  Implementado (broker local de teste
-                                      + cliente aiomqtt); auth/ACL EMQX
-                                      configurados em código; falta definir
-                                      `EMQX_AUTH_SECRET` e validar Compose
-
-  Dashboards/widgets                  CRUD, migration e integração mobile
-                                      criados e cobertos por testes
-
-  Automações/notificações             Regras, notificações internas e fila
-                                      MQTT de comandos implementadas e
-                                      testadas; falta firmware e push/e-mail
-
-  Heartbeat de dispositivos           Online/offline por last_seen implementado;
-                                      timeout padrão de 120s
-
-  Frontend (Expo/React Native)        Fluxos principais, dashboards/widgets,
-                                      automações e notificações ligados à API
-
-  Testes automatizados/CI             49 testes pytest (backend/tests/);
-                                      sem pipeline CI
-
-  Deploy de produção                  Pendente
-  -----------------------------------------------------------------------
+| Area | Estado |
+| --- | --- |
+| API e dados | FastAPI, PostgreSQL e migrations aplicados ate `c1d8e7a4f602` |
+| RBAC e acesso | Permissoes globais mais leitura por membro e escrita pelo dono do projeto |
+| Dispositivos | CRUD, rotacao MQTT e provisionamento de credenciais em uso unico |
+| Datastreams e historico | Tipos limitados; CRUD, valores atuais e historico implementados |
+| Password reset | Fluxo implementado; precisa de SMTP configurado |
+| MQTT local | Secret criado; EMQX nao foi reiniciado/validado (Docker indisponivel) |
+| Notificacoes | Persistidas na app; push/e-mail ainda pendentes |
+| Producao | Runbook pronto; host, TLS, backups e monitorizacao por provisionar |
+| Retencao de dados | Politica ainda por decidir |
+| CI | Workflow configurado; aguarda execucao remota em push/PR |
 
 ------------------------------------------------------------------------
 

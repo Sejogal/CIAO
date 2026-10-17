@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import logging
+from secrets import token_urlsafe
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,18 +20,93 @@ from app.core.security import (
 from app.modules.identity.credential_model import Credential
 from app.modules.identity.model import User
 from app.modules.identity.refresh_token_model import RefreshToken
+from app.modules.identity.password_reset_model import PasswordResetToken
 from app.modules.identity.role_model import Role
-from app.modules.identity.schemas import RegisterRequest
-from app.core.security import decode_refresh_token
-from app.core.config import settings
+from app.modules.identity.schemas import RegisterRequest, UserSelfUpdate
+from app.modules.identity.mail import mail_is_configured, password_reset_link, send_email
 
 DEFAULT_SELF_SIGNUP_ROLE = "user"
+logger = logging.getLogger(__name__)
 
 
 class IdentityService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    async def request_password_reset(db: AsyncSession, email: str) -> None:
+        if not mail_is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password recovery email is not configured",
+            )
+
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user or not await IdentityService.get_credential_for_user(db, user.id):
+            return
+
+        raw_token = token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        reset = PasswordResetToken(
+            user_id=user.id,
+            token_hash=sha256(raw_token.encode("utf-8")).hexdigest(),
+            expires_at=now + timedelta(minutes=30),
+        )
+        db.add(reset)
+        await db.commit()
+
+        try:
+            link = password_reset_link(raw_token)
+            await send_email(
+                user.email,
+                "Redefinir palavra-passe CIAO",
+                "Recebemos um pedido para redefinir a palavra-passe da sua conta.\n\n"
+                f"Abra este link nos próximos 30 minutos: {link}\n\n"
+                "Se não pediu esta alteração, ignore esta mensagem.",
+            )
+        except Exception:
+            logger.exception("Could not deliver password reset email")
+            reset.used_at = now
+            await db.commit()
+
+    @staticmethod
+    async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+        token_hash = sha256(token.encode("utf-8")).hexdigest()
+        now = datetime.now(timezone.utc)
+        result = await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash,
+                PasswordResetToken.used_at.is_(None),
+                PasswordResetToken.expires_at > now,
+            ).with_for_update()
+        )
+        reset = result.scalar_one_or_none()
+        if not reset:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password reset link is invalid or expired",
+            )
+
+        credential = await IdentityService.get_credential_for_user(db, reset.user_id)
+        if not credential:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password reset link is invalid or expired",
+            )
+
+        credential.password_hash = hash_password(new_password)
+        reset.used_at = now
+        await db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == reset.user_id)
+            .values(revoked=True)
+        )
+        user = await db.get(User, reset.user_id)
+        if user:
+            user.is_verified = True
+        await db.commit()
 
     @staticmethod
     async def register(
@@ -119,6 +197,19 @@ class IdentityService:
         )
 
         return refreshed_result.scalar_one()
+
+    @staticmethod
+    async def update_self(
+        db: AsyncSession,
+        user: User,
+        data: UserSelfUpdate,
+    ) -> User:
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(user, field, value)
+
+        await db.commit()
+        await db.refresh(user)
+        return user
 
     @staticmethod
     async def get_user_by_email(

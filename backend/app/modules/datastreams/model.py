@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Boolean, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import BaseEntity
@@ -11,6 +11,10 @@ from app.db.base import BaseEntity
 class Datastream(BaseEntity):
     __tablename__ = "datastreams"
     __table_args__ = (
+        CheckConstraint(
+            "data_type IN ('boolean', 'integer', 'float', 'string', 'json')",
+            name="ck_datastreams_data_type",
+        ),
         UniqueConstraint(
             "device_id",
             "key",

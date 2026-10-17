@@ -34,12 +34,42 @@ async function register(full_name: string, email: string, password: string) {
   });
 }
 
-export function useMe(enabled: boolean) {
+export function useMe(enabled: boolean, suppressGlobalError = false) {
   return useQuery({
     queryKey: ["me"],
     queryFn: () => api<Me>("/identity/me"),
     enabled,
     retry: false,
+    meta: { suppressGlobalError },
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Pick<Me, "full_name" | "avatar" | "language" | "timezone">) =>
+      api<Me>("/identity/me", { method: "PATCH", body: data }),
+    onSuccess: (user) => qc.setQueryData(["me"], user),
+  });
+}
+
+export function useRequestPasswordReset() {
+  return useMutation({
+    mutationFn: (email: string) => api<{ message: string }>("/identity/password-reset/request", {
+      method: "POST",
+      body: { email },
+      skipAuth: true,
+    }),
+  });
+}
+
+export function useConfirmPasswordReset() {
+  return useMutation({
+    mutationFn: (vars: { token: string; new_password: string }) => api<{ message: string }>("/identity/password-reset/confirm", {
+      method: "POST",
+      body: vars,
+      skipAuth: true,
+    }),
   });
 }
 

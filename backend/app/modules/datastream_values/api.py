@@ -10,7 +10,7 @@ from app.modules.datastream_values.schema import (
     DatastreamValueResponse,
 )
 from app.modules.datastream_values.service import DatastreamValueService
-from app.modules.identity.dependencies import get_current_user
+from app.modules.identity.dependencies import get_current_user, require_permission
 from app.modules.identity.model import User
 
 router = APIRouter(tags=["Datastream Values"])
@@ -20,6 +20,7 @@ router = APIRouter(tags=["Datastream Values"])
     "/{datastream_id}/values",
     response_model=DatastreamValueResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_permission("datastreams:update"))],
 )
 async def create_datastream_value(
     datastream_id: UUID,
@@ -42,7 +43,7 @@ async def create_datastream_value(
 async def get_latest_datastream_value(
     datastream_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:read")),
 ):
     return await DatastreamValueService.get_latest(
         db=db,
@@ -62,7 +63,7 @@ async def list_datastream_values(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission("datastreams:read")),
 ):
     return await DatastreamValueService.list_history(
         db=db,

@@ -55,6 +55,27 @@ export class ApiError extends Error {
   }
 }
 
+function responseErrorMessage(payload: unknown, status: number): string {
+  if (payload && typeof payload === "object" && "detail" in payload) {
+    const detail = payload.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => item && typeof item === "object" && "msg" in item ? item.msg : null)
+        .filter((message): message is string => typeof message === "string");
+      if (messages.length) return messages.join(". ");
+    }
+    if (detail && typeof detail === "object" && "msg" in detail && typeof detail.msg === "string") {
+      return detail.msg;
+    }
+  }
+  if (status === 401) return "A sessão expirou. Entre novamente.";
+  if (status === 403) return "Não tem permissão para esta ação.";
+  if (status === 404) return "O recurso solicitado não foi encontrado.";
+  if (status >= 500) return "O serviço encontrou um erro. Tente novamente mais tarde.";
+  return `O pedido falhou (HTTP ${status}).`;
+}
+
 let refreshing: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
@@ -93,16 +114,21 @@ export async function api<T>(
   headers["Content-Type"] = isForm ? "application/x-www-form-urlencoded" : "application/json";
   if (!options.skipAuth && accessToken) headers.Authorization = `Bearer ${accessToken}`;
 
-  const res = await fetch(`${apiUrl}${path}`, {
-    method: options.method ?? "GET",
-    headers,
-    body:
-      options.body === undefined
-        ? undefined
-        : isForm
-          ? (options.body as URLSearchParams).toString()
-          : JSON.stringify(options.body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiUrl}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      body:
+        options.body === undefined
+          ? undefined
+          : isForm
+            ? (options.body as URLSearchParams).toString()
+            : JSON.stringify(options.body),
+    });
+  } catch {
+    throw new ApiError("Não foi possível conectar à API. Verifique a rede e o URL configurado.", 0);
+  }
 
   if (res.status === 204) return undefined as T;
 
@@ -113,11 +139,7 @@ export async function api<T>(
 
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
-    const message =
-      (payload && typeof payload.detail === "string" && payload.detail) ||
-      (payload && Array.isArray(payload.detail) && payload.detail[0]?.msg) ||
-      `Erro ${res.status}`;
-    throw new ApiError(message, res.status);
+    throw new ApiError(responseErrorMessage(payload, res.status), res.status);
   }
 
   return res.json().catch(() => undefined as T);

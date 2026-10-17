@@ -70,16 +70,17 @@ async def get_project(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await ProjectService.get(
+    return await ProjectService.get_for_user(
         db=db,
         project_id=project_id,
-        owner_id=current_user.id,
+        user_id=current_user.id,
     )
 
 #ATUALIZAR PROJETO
 @router.patch(
     "/{project_id}",
     response_model=ProjectResponse,
+    dependencies=[Depends(require_permission("projects:update"))],
 )
 async def update_project(
     project_id: UUID,
@@ -99,6 +100,7 @@ async def update_project(
 @router.delete(
     "/{project_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_permission("projects:delete"))],
 )
 async def delete_project(
     project_id: UUID,

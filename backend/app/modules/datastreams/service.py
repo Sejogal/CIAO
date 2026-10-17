@@ -28,6 +28,11 @@ class DatastreamService:
             device_id=device_id,
             user_id=user_id,
         )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
+            user_id=user_id,
+        )
 
         if not device:
             raise HTTPException(
@@ -137,6 +142,16 @@ class DatastreamService:
             datastream_id=datastream_id,
             user_id=user_id,
         )
+        device = await DeviceService.get_for_user(
+            db=db,
+            device_id=datastream.device_id,
+            user_id=user_id,
+        )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
+            user_id=user_id,
+        )
 
         update_data = data.model_dump(exclude_unset=True)
 
@@ -199,6 +214,16 @@ class DatastreamService:
         datastream = await DatastreamService.get_for_user(
             db=db,
             datastream_id=datastream_id,
+            user_id=user_id,
+        )
+        device = await DeviceService.get_for_user(
+            db=db,
+            device_id=datastream.device_id,
+            user_id=user_id,
+        )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
             user_id=user_id,
         )
 

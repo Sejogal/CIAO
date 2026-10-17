@@ -1,8 +1,10 @@
 import asyncio
-import logging
+from time import perf_counter
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI
+import structlog
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.modules.identity.api import router as identity_router
@@ -17,9 +19,12 @@ from app.modules.mqtt.commands import run_command_publish_loop
 from app.modules.mqtt.client import run_mqtt_ingest_loop
 from app.modules.mqtt.heartbeat import run_device_heartbeat_loop
 from app.modules.mqtt.auth import router as mqtt_auth_router
+from app.core.config import settings
+from app.core.logger import configure_logging
 from app.db import models
 
-logger = logging.getLogger("ciao.mqtt")
+configure_logging(settings.DEBUG)
+logger = structlog.get_logger("ciao.http")
 
 
 @asynccontextmanager
@@ -47,11 +52,45 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Dev only: o app Expo corre em origens variáveis (web local, túneis, etc.)
-# e ainda não há domínio de produção fixo para restringir isto.
+
+@app.middleware("http")
+async def log_http_request(request: Request, call_next):
+    request_id = uuid4().hex
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
+    started_at = perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "http.request.failed",
+            method=request.method,
+            path=request.url.path,
+            duration_ms=round((perf_counter() - started_at) * 1000, 2),
+        )
+        raise
+    finally:
+        structlog.contextvars.clear_contextvars()
+
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "http.request.completed",
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=round((perf_counter() - started_at) * 1000, 2),
+        request_id=request_id,
+    )
+    return response
+
+# Keep wildcard CORS in local development only; production requires exact origins.
+if not settings.DEBUG and not settings.CORS_ALLOWED_ORIGINS:
+    raise RuntimeError("CORS_ALLOWED_ORIGINS must be configured when DEBUG is false")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"] if settings.DEBUG else settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

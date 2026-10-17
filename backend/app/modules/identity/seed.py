@@ -22,6 +22,11 @@ DEFAULT_PERMISSIONS = [
     ("devices:update", "Atualizar dispositivos"),
     ("devices:delete", "Eliminar dispositivos"),
 
+    ("datastreams:read", "Visualizar datastreams"),
+    ("datastreams:create", "Criar datastreams"),
+    ("datastreams:update", "Atualizar datastreams"),
+    ("datastreams:delete", "Eliminar datastreams"),
+
     
     ("companies:create", "Criar empresas"),
     ("companies:read", "Visualizar empresas"),
@@ -45,6 +50,11 @@ DEFAULT_ROLES = {
             "devices:update",
             "devices:delete",
 
+            "datastreams:read",
+            "datastreams:create",
+            "datastreams:update",
+            "datastreams:delete",
+
             "users:read",
             "users:create",
             "users:update",
@@ -64,6 +74,7 @@ DEFAULT_ROLES = {
             "projects:read",
             "projects:create",
             "devices:read",
+            "datastreams:read",
 
             "companies:read",
             "companies:create",
@@ -81,6 +92,10 @@ DEFAULT_ROLES = {
             "devices:create",
             "devices:update",
 
+            "datastreams:read",
+            "datastreams:create",
+            "datastreams:update",
+
             "companies:read",
             "companies:create",
             "companies:update",
@@ -94,6 +109,10 @@ DEFAULT_ROLES = {
             "devices:read",
             "devices:create",
             "devices:update",
+
+            "datastreams:read",
+            "datastreams:create",
+            "datastreams:update",
 
             "companies:read",
             # Um utilizador recém-registado (app móvel) tem de conseguir

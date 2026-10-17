@@ -3,11 +3,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { s, Header, Card, Button, Sparkline, Gauge, Toggle, Loading } from "@/ui";
 import { useDatastream, useLatestValue, useValueHistory, useCreateValue, useDeleteDatastream } from "@/api/datastreams";
 import { useDevice } from "@/api/devices";
+import { useProject } from "@/api/projects";
+import { useMe } from "@/api/auth";
 export default function Datastream() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const r = useRouter();
   const dsQuery = useDatastream(id);
   const deviceQuery = useDevice(dsQuery.data?.device_id);
+  const projectQuery = useProject(deviceQuery.data?.project_id);
+  const meQuery = useMe(true, true);
   const latestQuery = useLatestValue(id);
   const historyQuery = useValueHistory(id);
   const createValue = useCreateValue();
@@ -18,6 +22,7 @@ export default function Datastream() {
   const value = latestQuery.data?.value;
   const history = (historyQuery.data ?? []).map((v) => (typeof v.value === "number" ? v.value : 0)).reverse();
   const isSensor = x.data_type !== "boolean";
+  const canManage = projectQuery.data?.owner_id === meQuery.data?.id;
   return (
     <View style={s.safe}>
       <View style={s.content}>
@@ -28,14 +33,14 @@ export default function Datastream() {
           ) : (
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={{ fontSize: 28, fontWeight: "900" }}>{value ? "ON" : "OFF"}</Text>
-              <Toggle label={x.name} value={!!value} disabled={createValue.isPending} onValueChange={(v) => createValue.mutate({ datastream_id: x.id, value: v })} />
+              <Toggle label={x.name} value={!!value} disabled={!canManage || deviceQuery.data?.status !== "online" || createValue.isPending} onValueChange={(v) => createValue.mutate({ datastream_id: x.id, value: v })} />
             </View>
           )}
           {history.length > 1 && <Sparkline data={history} height={130} />}
           {!latestQuery.data && !latestQuery.isLoading && <Text style={s.muted}>Ainda sem valores recebidos.</Text>}
         </Card>
         <Card><Text style={s.muted}>Chave</Text><Text style={s.h2}>{x.key}</Text><Text style={s.muted}>Unidade: {x.unit || "—"}</Text></Card>
-        <Button variant="danger" onPress={() => deleteMutation.mutate({ id: x.id, deviceId: x.device_id }, { onSuccess: () => r.back() })} disabled={deleteMutation.isPending}>{deleteMutation.isPending ? "A eliminar…" : "Eliminar datastream"}</Button>
+        {canManage ? (<Button variant="danger" onPress={() => deleteMutation.mutate({ id: x.id, deviceId: x.device_id }, { onSuccess: () => r.back() })} disabled={deleteMutation.isPending}>{deleteMutation.isPending ? "A eliminar…" : "Eliminar datastream"}</Button>) : null}
       </View>
     </View>
   );

@@ -2,6 +2,10 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+
+DeviceStatus = Literal["online", "offline"]
 
 
 class DeviceCreate(BaseModel):
@@ -58,7 +62,7 @@ class DeviceResponse(BaseModel):
     name: str
     model: str | None
     firmware_version: str | None
-    status: str
+    status: DeviceStatus
     last_seen: datetime | None
     is_active: bool
 

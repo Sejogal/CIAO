@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -9,6 +9,7 @@ from app.modules.datastream_values.repository import DatastreamValueRepository
 from app.modules.datastream_values.schema import DatastreamValueCreate
 from app.modules.datastreams.service import DatastreamService
 from app.modules.automation.service import AutomationService
+from app.modules.devices.service import DeviceService
 
 SUPPORTED_DATA_TYPES = {"boolean", "integer", "float", "string", "json"}
 
@@ -24,10 +25,8 @@ def value_matches_data_type(value, data_type: str) -> bool:
         return isinstance(value, str)
     if data_type == "json":
         return True
-    # Datastream.data_type is free-text (no DB-level enum yet - see
-    # README_CIAO.md Prioridade 3); anything outside the known set is
-    # treated as opaque JSON rather than rejected.
-    return True
+    # Datastream.data_type is constrained by the request schema and DB.
+    return False
 
 
 def _validate_value_matches_data_type(value, data_type: str) -> None:
@@ -57,6 +56,17 @@ class DatastreamValueService:
             user_id=user_id,
         )
 
+        device = await DeviceService.get_for_user(
+            db=db,
+            device_id=datastream.device_id,
+            user_id=user_id,
+        )
+        await DeviceService.require_project_owner(
+            db=db,
+            project_id=device.project_id,
+            user_id=user_id,
+        )
+
         _validate_value_matches_data_type(
             data.value,
             datastream.data_type,
@@ -65,7 +75,7 @@ class DatastreamValueService:
         value = DatastreamValue(
             datastream_id=datastream_id,
             value=data.value,
-            recorded_at=data.recorded_at or datetime.now(),
+            recorded_at=data.recorded_at or datetime.now(timezone.utc),
         )
 
         created = await DatastreamValueRepository.create(
